@@ -6,14 +6,16 @@ coding plan is left, and whether you are on pace to run out before it resets.
 ```
 Claude · Team 5x
   Session      92% left     ~78% left at reset
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━┃━━━━━━━━━━━━━━━━
+  ███████████████████████████┊████████████▌░░░
   Extra Usage  $0.00 left      ! Limit reached
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
 Z.ai · GLM Coding Lite
   Session      81% left      ! Limit in 3h 15m
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┃━━━━━━
+  ███████████████████████████████████▋░┊░░░░░░
 ```
+
+That is the terminal rendering; a graphical frame draws each bar as a thin SVG rail instead.
 
 - `M-x openusage` opens the overview: a two-line card per limit with its bar and pace verdict.
 - `M-x openusage-provider` opens one provider in detail: when each limit resets, raw counts,
