@@ -1,0 +1,94 @@
+Claude · Team 5x
+  fetched 22:25:47 · cache fresh until 22:30:47
+
+  Session      92% left     ~78% left at reset
+  ███████████████████████████┊████████████▌░░░
+      resets     in 3h 10m
+      window     1h 50m of 5h elapsed (37%)
+      pace       0.22× even · 4.4% / hour
+      at reset   ~78% left at reset
+
+  Weekly       56% left     ~45% left at reset
+  ████████┊███████████████▋░░░░░░░░░░░░░░░░░░░
+      resets     in 1d 9h
+      window     5d 14h of 7d 0h elapsed (80%)
+      pace       0.55× even · 7.9% / day
+      at reset   ~45% left at reset
+
+  Fable        62% left     ~53% left at reset
+  ████████┊██████████████████▎░░░░░░░░░░░░░░░░
+      resets     in 1d 9h
+      window     5d 14h of 7d 0h elapsed (80%)
+      pace       0.47× even · 6.8% / day
+      at reset   ~53% left at reset
+
+  Extra Usage  $0.00 left      ! Limit reached
+  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+      resets     no reset window
+      used       $20.00 / $20.00
+
+Antigravity
+  fetched 22:22:24 · cache fresh until 22:27:24
+
+  Session       100% left
+  ████████████████████████████████████████████
+      resets     in 4h 53m
+      window     8m of 5h elapsed (3%)
+
+  Weekly        100% left
+  ████████████████████████████████████████████
+      resets     in 6d 23h
+      window     8m of 7d 0h elapsed (0%)
+
+  Claude        100% left
+  ████████████████████████████████████████████
+      resets     in 4h 53m
+      window     8m of 5h elapsed (3%)
+
+  Claude Weekly 100% left
+  ████████████████████████████████████████████
+      resets     in 6d 23h
+      window     8m of 7d 0h elapsed (0%)
+
+Codex · Plus
+  fetched 22:22:25 · cache fresh until 22:27:25
+
+  Session           52% left         ~3% spare
+  ██████████████████████┊░░░░░░░░░░░░░░░░░░░░░
+      resets     in 2h 32m
+      window     2h 29m of 5h elapsed (50%)
+      pace       0.97× even · 19.3% / hour
+      at reset   ~97% used at reset
+
+  Weekly            76% left         ~8% spare
+  ████████████████████████████████┊▌░░░░░░░░░░
+      resets     in 5d 4h
+      window     1d 19h of 7d 0h elapsed (26%)
+      pace       0.92× even · 13.1% / day
+      at reset   ~92% used at reset
+
+  Credits           0 credits
+
+  Credit Value      $0.00
+
+  Rate Limit Resets 2 resets
+      expires    Oct 5 at 06:13 (in 6d 7h)
+      expires    Oct 23 at 02:22 (in 24d 3h)
+
+Z.ai · GLM Coding Lite
+  fetched 22:22:25 · cache fresh until 22:27:25
+
+  Session      81% left      ! Limit in 3h 15m
+  ███████████████████████████████████▋░┊░░░░░░
+      resets     in 4h 15m
+      window     46m of 5h elapsed (15%)
+      pace       1.25× even · 24.9% / hour
+      at reset   ~25% over limit at reset
+
+  Web Searches 14 left       ! Limit in 3d 15h
+  ██████▏░░░░┊░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+      resets     in 7d 15h
+      used       86 / 100 searches
+      window     22d 8h of 30d 0h elapsed (75%)
+      pace       1.15× even · 3.8 searches / day
+      at reset   ~15% over limit at reset

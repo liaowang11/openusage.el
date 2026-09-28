@@ -1,0 +1,96 @@
+{
+  "schema": "openusage.limits.v1",
+  "generatedAt": "2026-01-01T00:00:00.000Z",
+  "providers": {
+    "claude": {
+      "displayName": "Claude",
+      "plan": "Team 5x",
+      "fetchedAt": "2026-01-01T00:00:00.000Z",
+      "expiresAt": "2026-01-01T00:05:00.000Z",
+      "stale": true,
+      "resources": {
+        "session": {
+          "kind": "consumption",
+          "unit": "percent",
+          "used": 10,
+          "limit": 100,
+          "remaining": 90,
+          "utilization": 0.1,
+          "resetsAt": "2026-01-01T04:00:00.000Z",
+          "windowSeconds": 18000
+        },
+        "weekly": {
+          "kind": "consumption",
+          "unit": "percent",
+          "used": 40,
+          "limit": 100,
+          "remaining": 60,
+          "utilization": 0.4,
+          "resetsAt": "2026-01-06T00:00:00.000Z",
+          "windowSeconds": 604800
+        }
+      }
+    },
+    "zai": {
+      "displayName": "Z.ai",
+      "plan": "GLM Coding Lite",
+      "fetchedAt": "2026-01-01T00:00:00.000Z",
+      "expiresAt": "2026-01-01T00:05:00.000Z",
+      "stale": false,
+      "resources": {
+        "session": {
+          "kind": "consumption",
+          "unit": "percent",
+          "used": 0,
+          "limit": 100,
+          "remaining": 100,
+          "utilization": 0
+        },
+        "webSearches": {
+          "kind": "consumption",
+          "unit": "searches",
+          "used": 3,
+          "limit": 100,
+          "remaining": 97,
+          "utilization": 0.03,
+          "resetsAt": "2026-01-25T00:00:00.000Z",
+          "windowSeconds": 2592000
+        }
+      }
+    },
+    "codex": {
+      "displayName": "Codex",
+      "plan": "Plus",
+      "fetchedAt": "2026-01-01T00:00:00.000Z",
+      "expiresAt": "2026-01-01T00:05:00.000Z",
+      "stale": false,
+      "resources": {
+        "credits": {
+          "available": 821,
+          "kind": "balance",
+          "unit": "credits"
+        },
+        "creditValue": {
+          "available": 12.5,
+          "kind": "balance",
+          "unit": "usd"
+        },
+        "rateLimitResets": {
+          "available": 2,
+          "expiresAt": [
+            "2026-01-03T00:00:00.000Z",
+            "2026-01-04T00:00:00.000Z"
+          ],
+          "kind": "balance",
+          "unit": "resets"
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "providerId": "claude",
+      "message": "Refresh failed; showing cached data."
+    }
+  ]
+}

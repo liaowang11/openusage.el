@@ -1,0 +1,32 @@
+Claude · Team 5x
+  Session      92% left     ~78% left at reset
+  ███████████████████████████┊████████████▌░░░
+  Weekly       56% left     ~45% left at reset
+  ████████┊███████████████▋░░░░░░░░░░░░░░░░░░░
+  Fable        62% left     ~53% left at reset
+  ████████┊██████████████████▎░░░░░░░░░░░░░░░░
+  Extra Usage  $0.00 left      ! Limit reached
+  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+
+Antigravity
+  Session       100% left
+  ████████████████████████████████████████████
+  Weekly        100% left
+  ████████████████████████████████████████████
+  Claude        100% left
+  ████████████████████████████████████████████
+  Claude Weekly 100% left
+  ████████████████████████████████████████████
+
+Codex · Plus
+  Session           52% left         ~3% spare
+  ██████████████████████┊░░░░░░░░░░░░░░░░░░░░░
+  Weekly            76% left         ~8% spare
+  ████████████████████████████████┊▌░░░░░░░░░░
+  Rate Limit Resets 2 resets
+
+Z.ai · GLM Coding Lite
+  Session      81% left      ! Limit in 3h 15m
+  ███████████████████████████████████▋░┊░░░░░░
+  Web Searches 14 left       ! Limit in 3d 15h
+  ██████▏░░░░┊░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░

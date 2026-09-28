@@ -1,0 +1,179 @@
+{
+  "errors": [],
+  "generatedAt": "2026-09-28T14:30:00.000Z",
+  "providers": {
+    "claude": {
+      "displayName": "Claude",
+      "expiresAt": "2026-09-28T14:30:47.000Z",
+      "fetchedAt": "2026-09-28T14:25:47.000Z",
+      "plan": "Team 5x",
+      "resources": {
+        "extraUsage": {
+          "kind": "consumption",
+          "limit": 20,
+          "remaining": 0,
+          "unit": "usd",
+          "used": 20,
+          "utilization": 1
+        },
+        "fable": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 62,
+          "resetsAt": "2026-09-30T00:00:00.000Z",
+          "unit": "percent",
+          "used": 38,
+          "utilization": 0.38,
+          "windowSeconds": 604800
+        },
+        "session": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 92,
+          "resetsAt": "2026-09-28T17:40:00.000Z",
+          "unit": "percent",
+          "used": 8,
+          "utilization": 0.08,
+          "windowSeconds": 18000
+        },
+        "weekly": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 56,
+          "resetsAt": "2026-09-30T00:00:00.000Z",
+          "unit": "percent",
+          "used": 44,
+          "utilization": 0.44,
+          "windowSeconds": 604800
+        }
+      },
+      "stale": false
+    },
+    "antigravity": {
+      "displayName": "Antigravity",
+      "expiresAt": "2026-09-28T14:27:24.000Z",
+      "fetchedAt": "2026-09-28T14:22:24.000Z",
+      "resources": {
+        "geminiSession": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 100,
+          "resetsAt": "2026-09-28T19:22:23.000Z",
+          "unit": "percent",
+          "used": 0,
+          "utilization": 0,
+          "windowSeconds": 18000
+        },
+        "geminiWeekly": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 100,
+          "resetsAt": "2026-10-05T14:22:23.000Z",
+          "unit": "percent",
+          "used": 0,
+          "utilization": 0,
+          "windowSeconds": 604800
+        },
+        "nonGeminiSession": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 100,
+          "resetsAt": "2026-09-28T19:22:23.000Z",
+          "unit": "percent",
+          "used": 0,
+          "utilization": 0,
+          "windowSeconds": 18000
+        },
+        "nonGeminiWeekly": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 100,
+          "resetsAt": "2026-10-05T14:22:23.000Z",
+          "unit": "percent",
+          "used": 0,
+          "utilization": 0,
+          "windowSeconds": 604800
+        }
+      },
+      "stale": false
+    },
+    "codex": {
+      "displayName": "Codex",
+      "expiresAt": "2026-09-28T14:27:25.000Z",
+      "fetchedAt": "2026-09-28T14:22:25.000Z",
+      "plan": "Plus",
+      "resources": {
+        "creditValue": {
+          "available": 0,
+          "kind": "balance",
+          "unit": "usd"
+        },
+        "credits": {
+          "available": 0,
+          "kind": "balance",
+          "unit": "credits"
+        },
+        "rateLimitResets": {
+          "available": 2,
+          "expiresAt": [
+            "2026-10-04T22:13:53.000Z",
+            "2026-10-22T18:22:09.000Z"
+          ],
+          "kind": "balance",
+          "unit": "resets"
+        },
+        "session": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 52,
+          "resetsAt": "2026-09-28T17:01:07.000Z",
+          "unit": "percent",
+          "used": 48,
+          "utilization": 0.48,
+          "windowSeconds": 18000
+        },
+        "weekly": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 76,
+          "resetsAt": "2026-10-03T18:38:37.000Z",
+          "unit": "percent",
+          "used": 24,
+          "utilization": 0.24,
+          "windowSeconds": 604800
+        }
+      },
+      "stale": false
+    },
+    "zai": {
+      "displayName": "Z.ai",
+      "expiresAt": "2026-09-28T14:27:25.000Z",
+      "fetchedAt": "2026-09-28T14:22:25.000Z",
+      "plan": "GLM Coding Lite",
+      "resources": {
+        "session": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 81,
+          "resetsAt": "2026-09-28T18:44:16.000Z",
+          "unit": "percent",
+          "used": 19,
+          "utilization": 0.19,
+          "windowSeconds": 18000
+        },
+        "webSearches": {
+          "kind": "consumption",
+          "limit": 100,
+          "remaining": 14,
+          "resetsAt": "2026-10-06T05:47:54.000Z",
+          "unit": "searches",
+          "used": 86,
+          "utilization": 0.86,
+          "windowSeconds": 2592000
+        }
+      },
+      "stale": false
+    }
+  },
+  "schema": "openusage.limits.v1"
+}
