@@ -122,6 +122,31 @@ FIELDS is a plist of `used' and any other keys to override."
       (should (equal (get-text-property (1+ bar) 'openusage-key text)
                      '(resource "claude" "session"))))))
 
+;;; Field selection
+
+(ert-deftest openusage-test-overview-fields-add-detail-lines ()
+  "Detail lines and zero balances move into the overview when listed."
+  (openusage-tests--in-zone
+    (let* ((openusage-overview-fields '(bar resets zero-balances))
+           (text (openusage-tests--render "combined.json")))
+      (should (string-match-p "^  Session      92% left\n  █+┊?█*▌░+\n      resets     in 3h 10m$" text))
+      (should (string-match-p "Credit Value" text))
+      (should-not (string-match-p "~78% left at reset\\|window \\|pace " text)))))
+
+(ert-deftest openusage-test-overview-without-bar ()
+  (openusage-tests--in-zone
+    (let* ((openusage-overview-fields '(verdict))
+           (text (openusage-tests--render "combined.json")))
+      (should-not (string-match-p "█\\|░" text))
+      (should (string-match-p "^  Weekly       56% left\n  Fable " text)))))
+
+(ert-deftest openusage-test-detail-fields-drop-lines ()
+  (openusage-tests--in-zone
+    (let* ((openusage-detail-fields '(verdict bar resets))
+           (text (openusage-tests--render "combined.json" t)))
+      (should (string-match-p "resets     in 3h 10m" text))
+      (should-not (string-match-p "pace \\|window \\|at reset   \\|fetched \\|expires \\|Credit Value" text)))))
+
 ;;; Formatting
 
 (ert-deftest openusage-test-compact-duration ()

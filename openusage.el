@@ -122,6 +122,31 @@ The command line tool sorts resources alphabetically; this puts them
 back in the app's order.  Ids not listed follow, in the tool's order."
   :type '(repeat string))
 
+(defconst openusage--field-type
+  '(set (const :tag "Pace verdict beside the value" verdict)
+        (const :tag "Progress bar" bar)
+        (const :tag "Reset time" resets)
+        (const :tag "Raw used / limit, for non-percent limits" used)
+        (const :tag "Window progress" window)
+        (const :tag "Pace and burn rate" pace)
+        (const :tag "Projection at reset" projection)
+        (const :tag "Balance expiry dates" expiries)
+        (const :tag "Balances at zero" zero-balances)
+        (const :tag "Cache fetched and expiry times" cache))
+  "Customization type of `openusage-overview-fields' and `openusage-detail-fields'.")
+
+(defcustom openusage-overview-fields '(verdict bar)
+  "What the overview buffer, `openusage', shows.
+The label and the amount left or used always show.  Any field listed
+in `openusage-detail-fields' can move here too."
+  :type openusage--field-type)
+
+(defcustom openusage-detail-fields
+  '(verdict bar resets used window pace projection expiries zero-balances cache)
+  "What a provider's detail buffer, `openusage-provider', shows.
+The label and the amount left or used always show."
+  :type openusage--field-type)
+
 (defface openusage-provider
   '((t :inherit font-lock-keyword-face :weight bold))
   "Face for a provider's display name.")
@@ -363,6 +388,15 @@ healthy ones only with `openusage-always-show-pacing'."
 (defconst openusage--eighths [?▏ ?▎ ?▍ ?▌ ?▋ ?▊ ?▉]
   "Glyphs for a cell N/8 filled, at index N-1.")
 
+(defvar openusage--fields nil
+  "Fields the buffer being rendered shows.
+Bound by `openusage-render' from `openusage-overview-fields' or
+`openusage-detail-fields'.")
+
+(defun openusage--field-p (field)
+  "Return non-nil when the buffer being rendered shows FIELD."
+  (memq field openusage--fields))
+
 (defvar openusage--render-frame nil
   "Graphic frame the SVG bars are sized and coloured for, or nil.
 Bound around a render; nil leaves the glyph bars bare.")
@@ -457,7 +491,8 @@ The text is a glyph bar, which a tty shows; with
        (alist-get 'used resource)))
 
 (defun openusage--card (label resource now)
-  "Return the two-line card of bounded RESOURCE under LABEL at NOW."
+  "Return the card of bounded RESOURCE under LABEL at NOW.
+One line, plus the bar when `openusage--fields' shows it."
   (let* ((meter (openusage--meter resource now))
          (severity (plist-get meter :severity))
          (face (openusage--severity-face severity))
@@ -467,7 +502,7 @@ The text is a glyph bar, which a tty shows; with
          (left-p (eq openusage-usage-display 'left))
          (amount (if left-p (max 0 (- limit used)) used))
          (fraction (min 1.0 (max 0.0 (/ (float amount) limit))))
-         (verdict (openusage--verdict meter now)))
+         (verdict (if (openusage--field-p 'verdict) (openusage--verdict meter now) "")))
     (concat
      "  "
      (openusage--spread
@@ -475,8 +510,8 @@ The text is a glyph bar, which a tty shows; with
               (propertize (format "%s %s" (openusage--short-amount amount unit) (if left-p "left" "used"))
                           'face face))
       (propertize verdict 'face (if (memq severity '(warning critical)) face 'openusage-detail)))
-     "\n  "
-     (openusage--bar fraction (openusage--tick meter resource now) severity))))
+     (when (openusage--field-p 'bar)
+       (concat "\n  " (openusage--bar fraction (openusage--tick meter resource now) severity))))))
 
 (defun openusage--expiries (resource)
   "Return RESOURCE's expiry times as a sorted list of float times."
@@ -523,7 +558,7 @@ Per hour for windows under a day of use so far, else per day."
     (format "%s / %s" amount (if per-day "day" "hour"))))
 
 (defun openusage--card-details (resource now)
-  "Return the detail lines of bounded RESOURCE at NOW."
+  "Return the detail lines `openusage--fields' shows for bounded RESOURCE at NOW."
   (let* ((used (alist-get 'used resource))
          (limit (alist-get 'limit resource))
          (unit (alist-get 'unit resource))
@@ -533,28 +568,29 @@ Per hour for windows under a day of use so far, else per day."
          (projection (openusage--projection meter)))
     (delq nil
           (list
-           (openusage--detail
-            "resets" (if resets-at
-                         (openusage--deadline-label nil (openusage--parse-timestamp resets-at) now)
-                       "no reset window"))
-           (unless (equal unit "percent")
+           (when (openusage--field-p 'resets)
+             (openusage--detail
+              "resets" (if resets-at
+                           (openusage--deadline-label nil (openusage--parse-timestamp resets-at) now)
+                         "no reset window")))
+           (when (and (openusage--field-p 'used) (not (equal unit "percent")))
              (openusage--detail "used" (format "%s / %s" (openusage--short-amount used unit)
                                                (openusage--amount limit unit))))
-           (when (and window (> (car window) 0) (< (car window) (cdr window)))
+           (when (and (openusage--field-p 'window) window (> (car window) 0) (< (car window) (cdr window)))
              (openusage--detail "window" (format "%s of %s elapsed (%d%%)"
                                                  (openusage--compact-duration (car window))
                                                  (openusage--compact-duration (cdr window))
                                                  (round (* 100 (/ (car window) (cdr window)))))))
-           (when (openusage--pace resource now)
+           (when (and (openusage--field-p 'pace) (openusage--pace resource now))
              (openusage--detail "pace" (format "%.2f× even · %s"
                                                (/ (/ (float used) limit) (/ (car window) (cdr window)))
                                                (openusage--rate used (car window) unit))))
-           (when projection (openusage--detail "at reset" projection))))))
+           (when (and (openusage--field-p 'projection) projection)
+             (openusage--detail "at reset" projection))))))
 
-(defun openusage--resource-rows (provider-id resource now detail)
+(defun openusage--resource-rows (provider-id resource now)
   "Return the rows of RESOURCE under PROVIDER-ID at NOW, or nil to skip it.
-RESOURCE is a (ID . FIELDS) entry.  DETAIL non-nil renders the detail
-buffer's fuller form."
+RESOURCE is a (ID . FIELDS) entry; `openusage--fields' picks the rows."
   (let* ((resource-id (symbol-name (car resource)))
          (fields (cdr resource))
          (label (openusage--label provider-id resource-id))
@@ -563,14 +599,14 @@ buffer's fuller form."
           (cond
            ((openusage--bounded-p fields)
             (string-join (cons (openusage--card label fields now)
-                               (and detail (openusage--card-details fields now)))
+                               (openusage--card-details fields now))
                          "\n"))
            ((and (equal kind "balance") (alist-get 'available fields))
-            (when (or detail
+            (when (or (openusage--field-p 'zero-balances)
                       (> (openusage--display-round (alist-get 'available fields) (alist-get 'unit fields)) 0))
               (string-join
                (cons (openusage--balance-line label fields now)
-                     (and detail
+                     (and (openusage--field-p 'expiries)
                           (mapcar (lambda (time)
                                     (openusage--detail
                                      "expires" (format "%s (%s)"
@@ -614,7 +650,7 @@ non-nil renders the detail buffer's fuller form."
       (setq header (concat header (propertize " …" 'face 'openusage-detail))))
     (push (propertize header 'openusage-key key) lines)
     (when open
-      (when (and detail (alist-get 'fetchedAt provider))
+      (when (and (openusage--field-p 'cache) (alist-get 'fetchedAt provider))
         (push (propertize
                (format "  fetched %s · cache %s %s"
                        (format-time-string "%H:%M:%S" (openusage--parse-timestamp (alist-get 'fetchedAt provider)))
@@ -633,7 +669,7 @@ non-nil renders the detail buffer's fuller form."
                                               (openusage--label provider-id (symbol-name (car resource)))))
                                            resources)))
                   (rows (delq nil (mapcar (lambda (resource)
-                                            (openusage--resource-rows provider-id resource now detail))
+                                            (openusage--resource-rows provider-id resource now))
                                           resources))))
         (when detail (push "" lines))
         (push (string-join rows (if detail "\n\n" "\n")) lines)))
@@ -641,12 +677,14 @@ non-nil renders the detail buffer's fuller form."
 
 (defun openusage-render (document now expanded &optional detail)
   "Render DOCUMENT, parsed `openusage.limits.v1' JSON, at float time NOW.
-EXPANDED is a hash table of provider fold states; DETAIL non-nil
-renders every provider in full, as the detail buffer does."
+EXPANDED is a hash table of provider fold states.  DETAIL non-nil
+renders as the detail buffer does: every provider open, spaced out, and
+showing `openusage-detail-fields' instead of `openusage-overview-fields'."
   (unless (equal (alist-get 'schema document) openusage--schema)
     (error "Unsupported OpenUsage schema: %S" (alist-get 'schema document)))
   (let ((providers (alist-get 'providers document))
         (errors (alist-get 'errors document))
+        (openusage--fields (if detail openusage-detail-fields openusage-overview-fields))
         (sections nil))
     (dolist (entry providers)
       (let ((provider-id (symbol-name (car entry))))

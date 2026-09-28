@@ -85,6 +85,30 @@ With a prefix argument, `openusage` and `openusage-provider` ask for the host di
 | `openusage-always-show-pacing` | `nil` | Always Show Pacing |
 | `openusage-time-format` | `"%H:%M"` | Time Format |
 
+### What each buffer shows
+
+The label and the amount left or used always show. Everything else is a field you can
+put in either buffer:
+
+| Field | Shows | Default buffer |
+|---|---|---|
+| `verdict` | the pace text beside the amount, such as `! Limit in 3h 15m` | both |
+| `bar` | the progress bar | both |
+| `resets` | when the limit resets | detail |
+| `used` | raw used / limit, for limits not counted in percent | detail |
+| `window` | how far into the reset window you are | detail |
+| `pace` | pace against even use, and the burn rate | detail |
+| `projection` | where the current pace lands at the reset | detail |
+| `expiries` | each balance expiry date | detail |
+| `zero-balances` | balances at zero | detail |
+| `cache` | when the data was fetched and when the cache expires | detail |
+
+```elisp
+;; Reset times in the overview too, and a detail buffer without the bar:
+(setq openusage-overview-fields '(verdict bar resets)
+      openusage-detail-fields '(verdict resets used window pace projection expiries cache))
+```
+
 The others:
 - `openusage-program`: the command to run.
 - `openusage-poll-interval`: seconds between polls.
