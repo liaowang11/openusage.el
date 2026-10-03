@@ -82,7 +82,7 @@ FIELDS is a plist of `used' and any other keys to override."
   (let ((openusage-always-show-pacing nil))
     (openusage-tests--in-zone
       (let ((text (openusage-tests--render "combined.json")))
-        (should (string-match-p "^  Session      92% left$" text))
+        (should (string-match-p "^  Session\n  █+┊?█*▌░+\n  92% left " text))
         (should-not (string-match-p "~78% left at reset" text))
         (should (string-match-p "~3% spare" text))))))
 
@@ -102,7 +102,7 @@ FIELDS is a plist of `used' and any other keys to override."
   (let ((openusage-usage-display 'used))
     (openusage-tests--in-zone
       (let ((text (openusage-tests--render "combined.json")))
-        (should (string-match-p "Session      8% used" text))
+        (should (string-match-p "\n  8% used " text))
         ;; An 8% used bar fills 3.52 cells: 3 full and a half.
         (should (string-match-p (concat "\n  " (regexp-quote "███▌░")) text))))))
 
@@ -124,28 +124,66 @@ FIELDS is a plist of `used' and any other keys to override."
 
 ;;; Field selection
 
+(ert-deftest openusage-test-overview-shows-resets-by-default ()
+  "Like the app's card: label and verdict, the bar, then amount and reset."
+  (openusage-tests--in-zone
+    (let ((text (openusage-tests--render "combined.json")))
+      (should (string-match-p "^  Session\n  █+┊?█*▌░+\n  92% left +Resets in 3h 10m$"
+                              text))
+      (should (string-match-p "^  Session +! Limit in 3h 15m\n  [^\n]+\n  81% left +Resets in 4h 15m$"
+                              text)))))
+
+(ert-deftest openusage-test-reset-exact-with-countdown-echo ()
+  "The reset reads in `openusage-reset-display'; hovering shows the other format."
+  (openusage-tests--in-zone
+    (let* ((openusage-reset-display 'exact)
+           (openusage--fields '(resets))
+           (text (openusage--card "Session" (openusage-tests--resource 'used 30) openusage-tests--now))
+           (start (string-search "Resets" text)))
+      (should (string-match-p "\n  70% left +Resets tomorrow at 00:30\\'" (substring-no-properties text)))
+      (should (equal (get-text-property start 'help-echo text) "Resets in 2h")))))
+
+(ert-deftest openusage-test-card-context-without-reset ()
+  "With no reset time, the app shows the window, a dollar limit, or the unit."
+  (let ((openusage--fields '(resets))
+        (card (lambda (&rest fields)
+                (car (last (split-string
+                            (substring-no-properties
+                             (openusage--card "X" (apply #'openusage-tests--resource fields)
+                                              openusage-tests--now))
+                            "\n"))))))
+    (should (equal (funcall card 'used 30 'resetsAt nil 'windowSeconds nil) "  70% left"))
+    (should (string-match-p "  70% left +Resets in 5h\\'" (funcall card 'used 30 'resetsAt nil)))
+    (should (string-match-p "  \\$5\\.00 left +\\$20 limit\\'"
+                            (funcall card 'used 15 'limit 20 'unit "usd" 'resetsAt nil 'windowSeconds nil)))
+    (should (string-match-p "  \\$5\\.00 left +\\$20\\.50 limit\\'"
+                            (funcall card 'used 15.5 'limit 20.5 'unit "usd" 'resetsAt nil 'windowSeconds nil)))
+    (should (string-match-p "  14 left +searches\\'"
+                            (funcall card 'used 86 'unit "searches" 'resetsAt nil 'windowSeconds nil)))))
+
 (ert-deftest openusage-test-overview-fields-add-detail-lines ()
   "Detail lines and zero balances move into the overview when listed."
   (openusage-tests--in-zone
-    (let* ((openusage-overview-fields '(bar resets zero-balances))
+    (let* ((openusage-overview-fields '(bar window zero-balances))
            (text (openusage-tests--render "combined.json")))
-      (should (string-match-p "^  Session      92% left\n  █+┊?█*▌░+\n      resets     in 3h 10m$" text))
+      (should (string-match-p "^  Session\n  █+┊?█*▌░+\n  92% left\n      window     1h 50m of 5h" text))
       (should (string-match-p "Credit Value" text))
-      (should-not (string-match-p "~78% left at reset\\|window \\|pace " text)))))
+      (should-not (string-match-p "~78% left at reset\\|Resets in\\|pace " text)))))
 
 (ert-deftest openusage-test-overview-without-bar ()
   (openusage-tests--in-zone
-    (let* ((openusage-overview-fields '(verdict))
+    (let* ((openusage-overview-fields '(verdict resets))
            (text (openusage-tests--render "combined.json")))
       (should-not (string-match-p "█\\|░" text))
-      (should (string-match-p "^  Weekly       56% left\n  Fable " text)))))
+      (should (string-match-p "^  Weekly\n  56% left +Resets in 1d 9h\n  Fable$" text)))))
 
 (ert-deftest openusage-test-detail-fields-drop-lines ()
   (openusage-tests--in-zone
     (let* ((openusage-detail-fields '(verdict bar resets))
            (text (openusage-tests--render "combined.json" t)))
-      (should (string-match-p "resets     in 3h 10m" text))
-      (should-not (string-match-p "pace \\|window \\|at reset   \\|fetched \\|expires \\|Credit Value" text)))))
+      (should (string-match-p "92% left +Resets in 3h 10m" text))
+      (should-not (string-match-p "resets  \\|pace \\|window \\|at reset   \\|fetched \\|expires \\|Credit Value"
+                                  text)))))
 
 ;;; Formatting
 

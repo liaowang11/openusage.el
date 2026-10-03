@@ -20,8 +20,9 @@
 ;; (https://github.com/robinebers/openusage), which reports AI coding
 ;; plan limits as `openusage.limits.v1' JSON.
 ;;
-;; - `openusage' opens the overview: one two-line card per limit, with
-;;   a progress bar and the pace verdict (running out, cutting it close).
+;; - `openusage' opens the overview: one card per limit, laid out like
+;;   the app's: the pace verdict (running out, cutting it close), a
+;;   progress bar, then the amount left and when it resets.
 ;; - `openusage-provider' opens one provider in detail: reset times,
 ;;   raw counts, window progress, burn rate and the end-of-window
 ;;   projection, every balance and the cache age.
@@ -123,9 +124,9 @@ back in the app's order.  Ids not listed follow, in the tool's order."
   :type '(repeat string))
 
 (defconst openusage--field-type
-  '(set (const :tag "Pace verdict beside the value" verdict)
+  '(set (const :tag "Pace verdict beside the label" verdict)
         (const :tag "Progress bar" bar)
-        (const :tag "Reset time" resets)
+        (const :tag "Reset time, or the limit with no reset" resets)
         (const :tag "Raw used / limit, for non-percent limits" used)
         (const :tag "Window progress" window)
         (const :tag "Pace and burn rate" pace)
@@ -135,7 +136,7 @@ back in the app's order.  Ids not listed follow, in the tool's order."
         (const :tag "Cache fetched and expiry times" cache))
   "Customization type of `openusage-overview-fields' and `openusage-detail-fields'.")
 
-(defcustom openusage-overview-fields '(verdict bar)
+(defcustom openusage-overview-fields '(verdict bar resets)
   "What the overview buffer, `openusage', shows.
 The label and the amount left or used always show.  Any field listed
 in `openusage-detail-fields' can move here too."
@@ -490,9 +491,36 @@ The text is a glyph bar, which a tty shows; with
        (alist-get 'limit resource) (> (alist-get 'limit resource) 0)
        (alist-get 'used resource)))
 
+(defun openusage--whole-usd (value)
+  "Format VALUE in dollars, with cents only when it is not whole."
+  (if (= value (round value))
+      (concat "$" (string-remove-suffix ".00" (openusage--thousands value)))
+    (openusage--amount value "usd")))
+
+(defun openusage--card-context (resource now)
+  "Return the text right of bounded RESOURCE's amount at NOW, or nil.
+The app's trailing label: when the limit resets, with the other reset
+format as its `help-echo'; with no reset time, the window length, a
+dollar limit, or the count unit."
+  (let ((resets-at (alist-get 'resetsAt resource))
+        (window (alist-get 'windowSeconds resource))
+        (unit (alist-get 'unit resource)))
+    (cond
+     (resets-at
+      (let ((time (openusage--parse-timestamp resets-at)))
+        (propertize (openusage--deadline-label "Resets" time now)
+                    'help-echo (openusage--deadline-label
+                                "Resets" time now
+                                (if (eq openusage-reset-display 'countdown) 'exact 'countdown)))))
+     ((and window (> window 0)) (concat "Resets in " (openusage--compact-duration window)))
+     ((equal unit "usd") (concat (openusage--whole-usd (alist-get 'limit resource)) " limit"))
+     ((and unit (not (member unit '("" "percent")))) unit))))
+
 (defun openusage--card (label resource now)
   "Return the card of bounded RESOURCE under LABEL at NOW.
-One line, plus the bar when `openusage--fields' shows it."
+Laid out like the app's card: the label with the pace verdict, the bar,
+then the amount with when it resets.  `openusage--fields' picks the
+verdict, bar and reset."
   (let* ((meter (openusage--meter resource now))
          (severity (plist-get meter :severity))
          (face (openusage--severity-face severity))
@@ -502,16 +530,20 @@ One line, plus the bar when `openusage--fields' shows it."
          (left-p (eq openusage-usage-display 'left))
          (amount (if left-p (max 0 (- limit used)) used))
          (fraction (min 1.0 (max 0.0 (/ (float amount) limit))))
-         (verdict (if (openusage--field-p 'verdict) (openusage--verdict meter now) "")))
+         (verdict (if (openusage--field-p 'verdict) (openusage--verdict meter now) ""))
+         (context (and (openusage--field-p 'resets) (openusage--card-context resource now))))
     (concat
      "  "
      (openusage--spread
-      (concat (openusage--label-column label)
-              (propertize (format "%s %s" (openusage--short-amount amount unit) (if left-p "left" "used"))
-                          'face face))
+      (propertize label 'face 'openusage-label)
       (propertize verdict 'face (if (memq severity '(warning critical)) face 'openusage-detail)))
      (when (openusage--field-p 'bar)
-       (concat "\n  " (openusage--bar fraction (openusage--tick meter resource now) severity))))))
+       (concat "\n  " (openusage--bar fraction (openusage--tick meter resource now) severity)))
+     "\n  "
+     (openusage--spread
+      (propertize (format "%s %s" (openusage--short-amount amount unit) (if left-p "left" "used"))
+                  'face face)
+      (propertize (or context "") 'face 'openusage-detail)))))
 
 (defun openusage--expiries (resource)
   "Return RESOURCE's expiry times as a sorted list of float times."
@@ -562,17 +594,11 @@ Per hour for windows under a day of use so far, else per day."
   (let* ((used (alist-get 'used resource))
          (limit (alist-get 'limit resource))
          (unit (alist-get 'unit resource))
-         (resets-at (alist-get 'resetsAt resource))
          (window (openusage--window resource now))
          (meter (openusage--meter resource now))
          (projection (openusage--projection meter)))
     (delq nil
           (list
-           (when (openusage--field-p 'resets)
-             (openusage--detail
-              "resets" (if resets-at
-                           (openusage--deadline-label nil (openusage--parse-timestamp resets-at) now)
-                         "no reset window")))
            (when (and (openusage--field-p 'used) (not (equal unit "percent")))
              (openusage--detail "used" (format "%s / %s" (openusage--short-amount used unit)
                                                (openusage--amount limit unit))))

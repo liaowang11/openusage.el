@@ -1,32 +1,44 @@
 Claude · Team 5x
-  Session      92% left     ~78% left at reset
+  Session                   ~78% left at reset
   ███████████████████████████┊████████████▌░░░
-  Weekly       56% left     ~45% left at reset
+  92% left                    Resets in 3h 10m
+  Weekly                    ~45% left at reset
   ████████┊███████████████▋░░░░░░░░░░░░░░░░░░░
-  Fable        62% left     ~53% left at reset
+  56% left                     Resets in 1d 9h
+  Fable                     ~53% left at reset
   ████████┊██████████████████▎░░░░░░░░░░░░░░░░
-  Extra Usage  $0.00 left      ! Limit reached
+  62% left                     Resets in 1d 9h
+  Extra Usage                  ! Limit reached
   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  $0.00 left                         $20 limit
 
 Antigravity
-  Session       100% left
+  Session
   ████████████████████████████████████████████
-  Weekly        100% left
+  100% left                   Resets in 4h 53m
+  Weekly
   ████████████████████████████████████████████
-  Claude        100% left
+  100% left                   Resets in 6d 23h
+  Claude
   ████████████████████████████████████████████
-  Claude Weekly 100% left
+  100% left                   Resets in 4h 53m
+  Claude Weekly
   ████████████████████████████████████████████
+  100% left                   Resets in 6d 23h
 
 Codex · Plus
-  Session           52% left         ~3% spare
+  Session                            ~3% spare
   ██████████████████████┊░░░░░░░░░░░░░░░░░░░░░
-  Weekly            76% left         ~8% spare
+  52% left                    Resets in 2h 32m
+  Weekly                             ~8% spare
   ████████████████████████████████┊▌░░░░░░░░░░
+  76% left                     Resets in 5d 4h
   Rate Limit Resets 2 resets
 
 Z.ai · GLM Coding Lite
-  Session      81% left      ! Limit in 3h 15m
+  Session                    ! Limit in 3h 15m
   ███████████████████████████████████▋░┊░░░░░░
-  Web Searches 14 left       ! Limit in 3d 15h
+  81% left                    Resets in 4h 15m
+  Web Searches               ! Limit in 3d 15h
   ██████▏░░░░┊░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  14 left                     Resets in 7d 15h

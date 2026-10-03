@@ -5,19 +5,24 @@ coding plan is left, and whether you are on pace to run out before it resets.
 
 ```
 Claude · Team 5x
-  Session      92% left     ~78% left at reset
+  Session                   ~78% left at reset
   ███████████████████████████┊████████████▌░░░
-  Extra Usage  $0.00 left      ! Limit reached
+  92% left                    Resets in 3h 10m
+  Extra Usage                  ! Limit reached
   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  $0.00 left                         $20 limit
 
 Z.ai · GLM Coding Lite
-  Session      81% left      ! Limit in 3h 15m
+  Session                    ! Limit in 3h 15m
   ███████████████████████████████████▋░┊░░░░░░
+  81% left                    Resets in 4h 15m
 ```
 
 That is the terminal rendering; a graphical frame draws each bar as a thin SVG rail instead.
 
-- `M-x openusage` opens the overview: a two-line card per limit with its bar and pace verdict.
+- `M-x openusage` opens the overview: a card per limit laid out like the app's, with the pace
+  verdict, the bar, then the amount left and when it resets. Hovering the reset time shows it
+  in the other format, countdown or exact.
 - `M-x openusage-provider` opens one provider in detail: when each limit resets, raw counts,
   how far into the window you are, burn rate, the projection at reset, every balance and the
   cache age. `RET` on a provider or limit in the overview opens it too.
@@ -92,9 +97,9 @@ put in either buffer:
 
 | Field | Shows | Default buffer |
 |---|---|---|
-| `verdict` | the pace text beside the amount, such as `! Limit in 3h 15m` | both |
+| `verdict` | the pace text beside the label, such as `! Limit in 3h 15m` | both |
 | `bar` | the progress bar | both |
-| `resets` | when the limit resets | detail |
+| `resets` | when the limit resets, right of the amount; with no reset time, the window length, the dollar limit or the unit | both |
 | `used` | raw used / limit, for limits not counted in percent | detail |
 | `window` | how far into the reset window you are | detail |
 | `pace` | pace against even use, and the burn rate | detail |
@@ -104,8 +109,8 @@ put in either buffer:
 | `cache` | when the data was fetched and when the cache expires | detail |
 
 ```elisp
-;; Reset times in the overview too, and a detail buffer without the bar:
-(setq openusage-overview-fields '(verdict bar resets)
+;; Pacing detail in the overview too, and a detail buffer without the bar:
+(setq openusage-overview-fields '(verdict bar resets pace projection)
       openusage-detail-fields '(verdict resets used window pace projection expiries cache))
 ```
 
