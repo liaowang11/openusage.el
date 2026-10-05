@@ -33,8 +33,9 @@
 ;;
 ;; In either buffer: TAB folds the provider at point, S-TAB cycles every
 ;; provider like `org-shifttab', RET opens the provider at point in its
-;; detail buffer (or refreshes with nothing at point), `g' forces a
-;; refresh and `q' quits.
+;; detail buffer (or refreshes with nothing at point), `n' and `p' move
+;; between providers, `g' forces a refresh and `q' quits.  `imenu'
+;; lists the providers.
 
 ;;; Code:
 
@@ -901,11 +902,50 @@ With nothing at point, force a fresh pull instead."
     (`(resource ,provider-id . ,_) (openusage-provider provider-id openusage--directory))
     (_ (openusage--refresh t))))
 
+(defun openusage--provider-line (direction)
+  "Return the start of the provider header DIRECTION lines away, or nil.
+DIRECTION is 1 to search forward, -1 backward; the search never wraps."
+  (save-excursion
+    (let (found)
+      (while (and (not found) (zerop (forward-line direction)))
+        (when (eq (car-safe (openusage--key-at-point)) 'provider)
+          (setq found (point))))
+      found)))
+
+(defun openusage-next-provider ()
+  "Move to the next provider's header, without wrapping."
+  (interactive)
+  (goto-char (or (openusage--provider-line 1) (user-error "No next provider"))))
+
+(defun openusage-previous-provider ()
+  "Move to the previous provider's header, without wrapping."
+  (interactive)
+  (goto-char (or (openusage--provider-line -1) (user-error "No previous provider"))))
+
+(defun openusage--imenu-index ()
+  "Return an `imenu' index of the providers in this buffer."
+  (save-excursion
+    (goto-char (point-min))
+    (let ((providers (alist-get 'providers openusage--document))
+          (index nil)
+          match)
+      (while (setq match (text-property-search-forward
+                          'openusage-key 'provider
+                          (lambda (kind key) (eq kind (car-safe key)))))
+        (let ((provider-id (cdr (prop-match-value match))))
+          (push (cons (or (alist-get 'displayName (alist-get (intern provider-id) providers))
+                          provider-id)
+                      (prop-match-beginning match))
+                index)))
+      (nreverse index))))
+
 (defvar-keymap openusage-mode-map
   :doc "Keymap for `openusage-mode'."
   "TAB" #'openusage-toggle
   "<backtab>" #'openusage-cycle
-  "RET" #'openusage-visit)
+  "RET" #'openusage-visit
+  "n" #'openusage-next-provider
+  "p" #'openusage-previous-provider)
 
 (define-derived-mode openusage-mode special-mode "OpenUsage"
   "Major mode for a live OpenUsage buffer.
@@ -914,6 +954,7 @@ seconds while visible; \\[revert-buffer] forces a fresh pull.
 
 \\{openusage-mode-map}"
   (setq-local revert-buffer-function #'openusage--revert
+              imenu-create-index-function #'openusage--imenu-index
               truncate-lines t
               openusage--expanded (make-hash-table :test 'equal))
   (add-hook 'kill-buffer-hook #'openusage--cancel-timer nil t)

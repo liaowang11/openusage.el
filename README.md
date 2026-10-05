@@ -74,10 +74,12 @@ Emacs 30's built-in `package-vc`:
 | `TAB` | `openusage-toggle` | Fold or unfold the provider at point |
 | `S-TAB` | `openusage-cycle` | Fold every provider, or open them all, like `org-shifttab` |
 | `RET` | `openusage-visit` | Open the provider at point in detail; refresh with nothing at point |
+| `n` | `openusage-next-provider` | Move to the next provider; stops at the last |
+| `p` | `openusage-previous-provider` | Move to the previous provider; stops at the first |
 | `g` | `revert-buffer` | Force a fresh pull (`openusage --force`) |
 | `q` | `quit-window` | Quit |
 
-With a prefix argument, `openusage` and `openusage-provider` ask for the host directory.
+With a prefix argument, `openusage` and `openusage-provider` ask for the host directory. `imenu` lists the providers.
 
 ## Customization
 

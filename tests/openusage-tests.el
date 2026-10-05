@@ -334,6 +334,33 @@ FIELDS is a plist of `used' and any other keys to override."
         (openusage-visit)
         (should (equal opened "claude"))))))
 
+(ert-deftest openusage-test-provider-motion-without-wrapping ()
+  (openusage-tests--with-buffer
+    (goto-char (point-min))
+    (should-error (openusage-previous-provider) :type 'user-error)
+    (should (= (point) (point-min)))
+    (forward-line 2)
+    (openusage-next-provider)
+    (should (equal (openusage--key-at-point) '(provider . "antigravity")))
+    (should (bolp))
+    (openusage-next-provider)
+    (openusage-next-provider)
+    (should (equal (openusage--key-at-point) '(provider . "zai")))
+    (goto-char (point-max))
+    (should-error (openusage-next-provider) :type 'user-error)
+    (should (= (point) (point-max)))
+    (openusage-previous-provider)
+    (should (equal (openusage--key-at-point) '(provider . "zai")))
+    (openusage-previous-provider)
+    (should (equal (openusage--key-at-point) '(provider . "codex")))))
+
+(ert-deftest openusage-test-imenu-lists-providers ()
+  (openusage-tests--with-buffer
+    (let ((index (openusage--imenu-index)))
+      (should (equal (mapcar #'car index) '("Claude" "Antigravity" "Codex" "Z.ai")))
+      (goto-char (cdr (nth 2 index)))
+      (should (equal (openusage--key-at-point) '(provider . "codex"))))))
+
 (ert-deftest openusage-test-repaint-keeps-point-entry ()
   (openusage-tests--with-buffer
     (goto-char (point-max))
