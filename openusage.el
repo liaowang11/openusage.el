@@ -281,6 +281,13 @@ Nil when RESOURCE has no reset window."
     (when (and resets-at window (> window 0))
       (cons (- now (- (openusage--parse-timestamp resets-at) window)) (float window)))))
 
+(defun openusage--settled-p (window)
+  "Return non-nil when enough of WINDOW has passed to project from.
+WINDOW is (ELAPSED . PERIOD) from `openusage--window'.  Settled from a
+minute or 1% in, whichever is later, until the window ends."
+  (and (>= (car window) (max 60 (* (cdr window) 0.01)))
+       (< (car window) (cdr window))))
+
 (defun openusage--pace (resource now)
   "Return the pace of RESOURCE at NOW as (STATUS . PROJECTED), or nil.
 STATUS is `ahead' (projected to finish with 10% or more to spare),
@@ -291,15 +298,13 @@ a stable projection."
   (let ((used (alist-get 'used resource))
         (limit (alist-get 'limit resource))
         (window (openusage--window resource now)))
-    (when (and used limit window (> limit 0) (> used 0))
-      (let ((elapsed (car window)) (period (cdr window)))
-        (when (and (>= elapsed (max 60 (* period 0.01))) (< elapsed period))
-          (let ((projected (* (/ used elapsed) period)))
-            (cons (cond ((>= used limit) 'behind)
-                        ((<= projected (* limit 0.9)) 'ahead)
-                        ((<= projected limit) 'on-track)
-                        (t 'behind))
-                  projected)))))))
+    (when (and used limit window (> limit 0) (> used 0) (openusage--settled-p window))
+      (let ((projected (* (/ used (car window)) (cdr window))))
+        (cons (cond ((>= used limit) 'behind)
+                    ((<= projected (* limit 0.9)) 'ahead)
+                    ((<= projected limit) 'on-track)
+                    (t 'behind))
+              projected)))))
 
 (defun openusage--level (used limit)
   "Return the severity of USED against LIMIT with no pace to go on.
@@ -380,8 +385,7 @@ healthy ones only with `openusage-always-show-pacing'."
     (when (and window
                (memq (plist-get meter :state)
                      (if openusage-always-show-pacing '(healthy close running-out) '(close running-out)))
-               (>= (car window) (max 60 (* (cdr window) 0.01)))
-               (< (car window) (cdr window)))
+               (openusage--settled-p window))
       (let ((elapsed (/ (car window) (cdr window))))
         (if (eq openusage-usage-display 'left) (- 1 elapsed) elapsed)))))
 
