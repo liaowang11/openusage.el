@@ -833,8 +833,8 @@ still repaints once a minute."
         openusage--document document)
   (let ((signature (cons (floor (float-time) 60) (openusage--document-signature document))))
     (unless (equal signature openusage--signature)
-      (setq openusage--signature signature)
-      (openusage--repaint))))
+      (openusage--repaint)
+      (setq openusage--signature signature))))
 
 (defun openusage--show-error (message)
   "Report fetch error MESSAGE once, and paint it if nothing else shows."
@@ -891,6 +891,7 @@ changes that leave each window's buffer as it was."
 
 (defun openusage--revert (&optional _ignore-auto _noconfirm)
   "Force a fresh pull, bypassing the shared cache."
+  (setq openusage--signature nil)
   (openusage--refresh t))
 
 (defun openusage-toggle ()

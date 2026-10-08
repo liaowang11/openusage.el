@@ -420,6 +420,26 @@ not at the next poll tick."
         (when (buffer-live-p buffer) (kill-buffer buffer))
         (set-window-buffer nil previous)))))
 
+(ert-deftest openusage-test-show-retries-after-render-error ()
+  "A render that signals leaves no signature behind, so the next show
+in the same minute paints, and a revert repaints unchanged data."
+  (with-temp-buffer
+    (setq-local openusage--expanded (make-hash-table :test 'equal))
+    (let ((document (openusage-tests--fixture "combined.json"))
+          (now (float-time)))
+      (cl-letf (((symbol-function 'float-time) (lambda (&optional _time) now)))
+        (cl-letf (((symbol-function 'openusage-render) (lambda (&rest _) (error "Render failed"))))
+          (should-error (openusage--show document)))
+        (openusage--show document)
+        (should (string-match-p "Claude · Team 5x" (buffer-string)))
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert "stale paint"))
+        (cl-letf (((symbol-function 'openusage--fetch)
+                   (lambda (&rest args) (funcall (car (last args)) document nil))))
+          (openusage--revert))
+        (should (string-match-p "Claude · Team 5x" (buffer-string)))))))
+
 (ert-deftest openusage-test-signature-ignores-jitter ()
   (let* ((document (openusage-tests--fixture "combined.json"))
          (touched (copy-tree document)))
