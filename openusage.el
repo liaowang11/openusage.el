@@ -980,9 +980,8 @@ at once.  \\[revert-buffer] forces a fresh pull.
               truncate-lines t
               openusage--expanded (make-hash-table :test 'equal))
   (add-hook 'kill-buffer-hook #'openusage--cancel-timer nil t)
-  (add-hook 'window-buffer-change-functions #'openusage--on-shown nil t)
-  (setq openusage--timer (run-with-timer openusage-poll-interval openusage-poll-interval
-                                         #'openusage--poll (current-buffer))))
+  (add-hook 'change-major-mode-hook #'openusage--cancel-timer nil t)
+  (add-hook 'window-buffer-change-functions #'openusage--on-shown nil t))
 
 (defun openusage--buffer-name (directory provider)
   "Return the buffer name for PROVIDER on DIRECTORY's host."
@@ -1000,6 +999,9 @@ at once.  \\[revert-buffer] forces a fresh pull.
         (openusage-mode))
       (setq openusage--directory directory
             openusage--provider provider)
+      (unless (timerp openusage--timer)
+        (setq openusage--timer (run-with-timer openusage-poll-interval openusage-poll-interval
+                                               #'openusage--poll buffer)))
       (openusage--refresh nil))
     (pop-to-buffer buffer)))
 

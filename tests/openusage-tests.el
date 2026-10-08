@@ -375,7 +375,6 @@ not at the next poll tick."
     (unwind-protect
         (with-temp-buffer
           (openusage-mode)
-          (openusage--cancel-timer)
           (setq openusage--document (openusage-tests--fixture "combined.json"))
           (openusage--repaint)
           (let ((inhibit-read-only t))
@@ -400,6 +399,26 @@ not at the next poll tick."
           (should (memq #'openusage--on-shown window-buffer-change-functions))
           (should-not (memq #'openusage--on-shown window-configuration-change-hook)))
       (set-window-buffer nil previous))))
+
+(ert-deftest openusage-test-mode-change-stops-timer ()
+  "Leaving `openusage-mode' cancels the poll timer instead of orphaning it."
+  (let ((previous (window-buffer))
+        (buffer nil))
+    (cl-flet ((polls ()
+                (seq-filter (lambda (timer)
+                              (and (eq (timer--function timer) #'openusage--poll)
+                                   (memq buffer (timer--args timer))))
+                            timer-list)))
+      (unwind-protect
+          (cl-letf (((symbol-function 'openusage--fetch) #'ignore))
+            (setq buffer (openusage--open default-directory "openusage-test"))
+            (openusage--open default-directory "openusage-test")
+            (should (= (length (polls)) 1))
+            (with-current-buffer buffer (text-mode))
+            (should-not (polls)))
+        (mapc #'cancel-timer (polls))
+        (when (buffer-live-p buffer) (kill-buffer buffer))
+        (set-window-buffer nil previous)))))
 
 (ert-deftest openusage-test-signature-ignores-jitter ()
   (let* ((document (openusage-tests--fixture "combined.json"))
