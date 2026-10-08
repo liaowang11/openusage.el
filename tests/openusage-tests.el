@@ -498,6 +498,44 @@ in the same minute paints, and a revert repaints unchanged data."
                            "zai --force"))))
       (delete-directory dir t))))
 
+;; Upstream writes JSON to stdout, then warnings to stderr; a hard
+;; failure writes stderr only.  Both land in the one output buffer.
+(defun openusage-tests--fetch-with (body)
+  "Fetch through a fake `openusage-program' running shell BODY.
+Return the (DOCUMENT ERROR) its callback received."
+  (let* ((dir (make-temp-file "openusage-bin-" t))
+         (script (expand-file-name "openusage" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file script
+            (insert "#!/bin/sh\n" body "\n"))
+          (set-file-modes script #o755)
+          (let ((openusage-program script) result)
+            (openusage--fetch nil dir nil (lambda (document err) (setq result (list document err))))
+            (with-timeout (5 (ert-fail "fetch timed out"))
+              (while (not result) (accept-process-output nil 0.05)))
+            result))
+      (delete-directory dir t))))
+
+(ert-deftest openusage-test-fetch-reports-program-error ()
+  (should (equal (openusage-tests--fetch-with "echo 'openusage: Unknown provider: x' >&2\nexit 2")
+                 '(nil "Unknown provider: x")))
+  (should (equal (openusage-tests--fetch-with "echo >&2\necho '  Could not open the OpenUsage settings domain.' >&2\nexit 4")
+                 '(nil "Could not open the OpenUsage settings domain.")))
+  (should (string-match-p "exited 3 with no usable output\\'"
+                          (nth 1 (openusage-tests--fetch-with "exit 3"))))
+  ;; JSON of another shape is no error message either.
+  (should (string-match-p "exited 0 with no usable output\\'"
+                          (nth 1 (openusage-tests--fetch-with "printf '{\\n  \"schema\": \"other\"\\n}\\n'")))))
+
+(ert-deftest openusage-test-fetch-parses-output-before-warnings ()
+  (let ((result (openusage-tests--fetch-with
+                 (format "cat %s\necho 'openusage: zai refresh failed' >&2\nexit 1"
+                         (shell-quote-argument
+                          (expand-file-name "fixtures/combined.json" openusage-tests--dir))))))
+    (should (null (nth 1 result)))
+    (should (equal (alist-get 'schema (car result)) openusage--schema))))
+
 (ert-deftest openusage-test-fetch-missing-program ()
   (let ((openusage-program "openusage-not-installed-anywhere") result)
     (openusage--fetch nil default-directory nil (lambda (document err) (setq result (list document err))))

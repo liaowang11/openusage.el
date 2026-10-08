@@ -744,21 +744,27 @@ showing `openusage-detail-fields' instead of `openusage-overview-fields'."
 (defun openusage--parse-output (buffer exit-status callback)
   "Parse BUFFER's JSON and call CALLBACK with (DOCUMENT ERROR).
 OpenUsage exits nonzero on a partial refresh failure yet still prints
-usable JSON, so only a parse failure counts as an error; EXIT-STATUS
-only goes into its message."
+usable JSON, so only a parse failure counts as an error.  Its message
+is the first line of output that is not JSON, else one naming
+EXIT-STATUS."
   (let ((document (with-current-buffer buffer
                     (goto-char (point-min))
                     (ignore-errors (json-parse-buffer :object-type 'alist :array-type 'list)))))
     (if (and (consp document) (equal (alist-get 'schema document) openusage--schema))
         (funcall callback document nil)
-      (funcall callback nil (format "%s exited %d with no usable output" openusage-program exit-status)))))
+      (let ((line (car (split-string (with-current-buffer buffer (buffer-string)) "\n" t "[ \t\r]+"))))
+        (funcall callback nil
+                 (if (and line (not (consp document)))
+                     (string-remove-prefix "openusage: " line)
+                   (format "%s exited %d with no usable output" openusage-program exit-status)))))))
 
 (defun openusage--fetch (provider directory force callback)
   "Run `openusage-program' for PROVIDER in DIRECTORY, then call CALLBACK.
 PROVIDER nil means every enabled provider; FORCE non-nil bypasses the
 shared cache.  DIRECTORY selects the host, so a TRAMP directory runs the
-tool there.  CALLBACK receives (DOCUMENT ERROR).  Only stdout is read:
-TRAMP copies a remote stderr in after the sentinel runs."
+tool there.  CALLBACK receives (DOCUMENT ERROR).  The process has no
+separate stderr, so OpenUsage's warnings and errors land in the same
+buffer as its JSON, after it."
   (let* ((default-directory (or directory default-directory))
          (remote (file-remote-p default-directory)))
     (if (not (executable-find openusage-program remote))
