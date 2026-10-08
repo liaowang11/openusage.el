@@ -555,7 +555,7 @@ the file `runs' in `openusage--directory'."
              openusage--expanded (make-hash-table :test 'equal))
        (unwind-protect (progn ,@body)
          (when (process-live-p openusage--process)
-           (delete-process openusage--process))
+           (delete-process (prog1 openusage--process (setq openusage--process nil))))
          (delete-directory dir t)))))
 
 (defun openusage-tests--runs ()
@@ -594,6 +594,28 @@ the file `runs' in `openusage--directory'."
       ;; The killed fetch's sentinel ran and reported nothing.
       (should (null errors))
       (should (string-match-p "Claude · Team 5x" (buffer-string))))))
+
+(ert-deftest openusage-test-fetch-remote-missing-program ()
+  ;; A remote shell that cannot find the program exits 127.
+  (should (string-match-p "/openusage is not on PATH\\'"
+                          (nth 1 (openusage-tests--fetch-with "echo 'sh: openusage: not found' >&2\nexit 127")))))
+
+(ert-deftest openusage-test-poll-never-opens-a-connection ()
+  (let ((fetches 0) connected)
+    (with-temp-buffer
+      (setq openusage--directory "/ssh:host:/home/")
+      (cl-letf (((symbol-function 'get-buffer-window) (lambda (&rest _) (selected-window)))
+                ((symbol-function 'file-remote-p)
+                 (lambda (_file &optional _identification connect-only)
+                   (and (or connected (not connect-only)) "/ssh:host:")))
+                ((symbol-function 'openusage--fetch) (lambda (&rest _) (cl-incf fetches) nil)))
+        (openusage--poll (current-buffer))
+        (should (= fetches 0))
+        (openusage--refresh t)
+        (should (= fetches 1))
+        (setq connected t)
+        (openusage--poll (current-buffer))
+        (should (= fetches 2))))))
 
 (ert-deftest openusage-test-fetch-missing-program ()
   (let ((openusage-program "openusage-not-installed-anywhere") result)

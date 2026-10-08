@@ -57,8 +57,9 @@
 
 (defcustom openusage-poll-interval 5
   "Seconds between polls of a visible OpenUsage buffer.
-Polls read OpenUsage's shared five-minute cache, so they are cheap; a
-hidden buffer is not polled."
+Polls read OpenUsage's shared five-minute cache, so locally they are
+cheap; on a remote host each one is a round trip over TRAMP.  A hidden
+buffer, or one whose TRAMP connection is closed, is not polled."
   :type 'number)
 
 (defcustom openusage-expand-by-default t
@@ -754,9 +755,10 @@ EXIT-STATUS."
         (funcall callback document nil)
       (let ((line (car (split-string (with-current-buffer buffer (buffer-string)) "\n" t "[ \t\r]+"))))
         (funcall callback nil
-                 (if (and line (not (consp document)))
-                     (string-remove-prefix "openusage: " line)
-                   (format "%s exited %d with no usable output" openusage-program exit-status)))))))
+                 (cond
+                  ((eql exit-status 127) (format "%s is not on PATH" openusage-program))
+                  ((and line (not (consp document))) (string-remove-prefix "openusage: " line))
+                  (t (format "%s exited %d with no usable output" openusage-program exit-status))))))))
 
 (defun openusage--fetch (provider directory force callback)
   "Run `openusage-program' for PROVIDER in DIRECTORY, then call CALLBACK.
@@ -766,11 +768,9 @@ tool there.  CALLBACK receives (DOCUMENT ERROR).  Return the process,
 or nil when CALLBACK already ran without one.  The process has no
 separate stderr, so OpenUsage's warnings and errors land in the same
 buffer as its JSON, after it."
-  (let* ((default-directory (or directory default-directory))
-         (remote (file-remote-p default-directory)))
-    (if (not (executable-find openusage-program remote))
-        (ignore (funcall callback nil (format "%s is not on PATH" openusage-program)))
-      (let ((stdout (generate-new-buffer " *openusage-stdout*")))
+  (let ((default-directory (or directory default-directory))
+        (stdout (generate-new-buffer " *openusage-stdout*")))
+    (condition-case err
         (make-process
          :name "openusage"
          :buffer stdout
@@ -782,7 +782,14 @@ buffer as its JSON, after it."
            (unless (process-live-p process)
              (unwind-protect
                  (openusage--parse-output stdout (process-exit-status process) callback)
-               (kill-buffer stdout)))))))))
+               (kill-buffer stdout)))))
+      ;; A local program that is missing signals; a remote one exits 127.
+      (file-missing
+       (kill-buffer stdout)
+       (ignore (funcall callback nil (format "%s is not on PATH" openusage-program))))
+      (error
+       (kill-buffer stdout)
+       (signal (car err) (cdr err))))))
 
 ;;; The live buffers
 
@@ -894,10 +901,14 @@ error instead of leaving the buffer stuck."
       (setq openusage--process process))))
 
 (defun openusage--poll (buffer)
-  "Refresh BUFFER from the cache while it is visible."
+  "Refresh BUFFER from the cache while it is visible.
+Polls run from timers and hooks, so a remote BUFFER is skipped until
+its TRAMP connection is open: opening one blocks Emacs."
   (when (and (buffer-live-p buffer) (get-buffer-window buffer 'visible))
     (with-current-buffer buffer
-      (openusage--refresh nil))))
+      (let ((directory (or openusage--directory default-directory)))
+        (unless (and (file-remote-p directory) (not (file-remote-p directory nil t)))
+          (openusage--refresh nil))))))
 
 (defun openusage--on-shown (window)
   "Freshen this buffer the moment WINDOW starts showing it again.
