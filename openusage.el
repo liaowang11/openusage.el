@@ -872,12 +872,17 @@ any other error instead of leaving the buffer stuck."
     (with-current-buffer buffer
       (openusage--refresh nil))))
 
-(defun openusage--display ()
-  "Freshen this buffer the moment a window shows it again.
+(defun openusage--on-shown (window)
+  "Freshen this buffer the moment WINDOW starts showing it again.
 Repaint from the last document so its countdowns are current, and
-start fetching at once instead of waiting for the next poll tick."
-  (openusage--repaint)
-  (openusage--poll (current-buffer)))
+start fetching at once instead of waiting for the next poll tick.
+Run from `window-buffer-change-functions', which also calls it when
+WINDOW stops showing the buffer, so that call is skipped; unlike
+`window-configuration-change-hook' it ignores resizes and layout
+changes that leave each window's buffer as it was."
+  (when (eq (window-buffer window) (current-buffer))
+    (openusage--repaint)
+    (openusage--poll (current-buffer))))
 
 (defun openusage--cancel-timer ()
   "Stop this buffer's poll timer."
@@ -975,7 +980,7 @@ at once.  \\[revert-buffer] forces a fresh pull.
               truncate-lines t
               openusage--expanded (make-hash-table :test 'equal))
   (add-hook 'kill-buffer-hook #'openusage--cancel-timer nil t)
-  (add-hook 'window-configuration-change-hook #'openusage--display nil t)
+  (add-hook 'window-buffer-change-functions #'openusage--on-shown nil t)
   (setq openusage--timer (run-with-timer openusage-poll-interval openusage-poll-interval
                                          #'openusage--poll (current-buffer))))
 
