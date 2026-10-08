@@ -750,7 +750,7 @@ is the first line of output that is not JSON, else one naming
 EXIT-STATUS."
   (let ((document (with-current-buffer buffer
                     (goto-char (point-min))
-                    (ignore-errors (json-parse-buffer :object-type 'alist :array-type 'list)))))
+                    (ignore-errors (json-parse-buffer :object-type 'alist :array-type 'list :null-object nil)))))
     (if (and (consp document) (equal (alist-get 'schema document) openusage--schema))
         (funcall callback document nil)
       (let ((line (car (split-string (with-current-buffer buffer (buffer-string)) "\n" t "[ \t\r]+"))))

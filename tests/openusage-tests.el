@@ -24,7 +24,7 @@
   "Return fixture NAME parsed as JSON."
   (with-temp-buffer
     (insert-file-contents (expand-file-name (concat "fixtures/" name) openusage-tests--dir))
-    (json-parse-buffer :object-type 'alist :array-type 'list)))
+    (json-parse-buffer :object-type 'alist :array-type 'list :null-object nil)))
 
 (defun openusage-tests--expected (name)
   "Return golden file NAME without its trailing newline."
@@ -616,6 +616,19 @@ the file `runs' in `openusage--directory'."
         (setq connected t)
         (openusage--poll (current-buffer))
         (should (= fetches 2))))))
+
+(ert-deftest openusage-test-fetch-reads-null-as-nil ()
+  (let (result)
+    (with-temp-buffer
+      (insert-file-contents (expand-file-name "fixtures/combined.json" openusage-tests--dir))
+      (should (search-forward "\"plan\": \"Team 5x\"" nil t))
+      (replace-match "\"plan\": null" t t)
+      (openusage--parse-output (current-buffer) 0 (lambda (document err) (setq result (list document err)))))
+    (should (null (nth 1 result)))
+    (should (null (alist-get 'plan (alist-get 'claude (alist-get 'providers (car result))))))
+    (should (string-match-p "^Claude$" (substring-no-properties
+                                        (openusage-render (car result) openusage-tests--now
+                                                          (make-hash-table :test 'equal)))))))
 
 (ert-deftest openusage-test-fetch-missing-program ()
   (let ((openusage-program "openusage-not-installed-anywhere") result)
