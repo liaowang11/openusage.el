@@ -536,6 +536,65 @@ Return the (DOCUMENT ERROR) its callback received."
     (should (null (nth 1 result)))
     (should (equal (alist-get 'schema (car result)) openusage--schema))))
 
+(defmacro openusage-tests--with-hanging-program (&rest body)
+  "Run BODY in a fresh buffer whose `openusage-program' hangs on first use.
+Later runs print the combined fixture.  Each run appends a line to
+the file `runs' in `openusage--directory'."
+  (declare (indent 0))
+  `(let* ((dir (make-temp-file "openusage-bin-" t))
+          (script (expand-file-name "openusage" dir))
+          (openusage-program script))
+     (with-temp-file script
+       (insert (format "#!/bin/sh\necho run >> %1$s/runs\nif [ -e %1$s/hung ]; then cat %2$s; else touch %1$s/hung; exec sleep 30; fi\n"
+                       (shell-quote-argument dir)
+                       (shell-quote-argument
+                        (expand-file-name "fixtures/combined.json" openusage-tests--dir)))))
+     (set-file-modes script #o755)
+     (with-temp-buffer
+       (setq openusage--directory dir
+             openusage--expanded (make-hash-table :test 'equal))
+       (unwind-protect (progn ,@body)
+         (when (process-live-p openusage--process)
+           (delete-process openusage--process))
+         (delete-directory dir t)))))
+
+(defun openusage-tests--runs ()
+  "Return how many times the hanging program has started."
+  (let ((runs (expand-file-name "runs" openusage--directory)))
+    (with-timeout (5 (ert-fail "program never started"))
+      (while (not (file-exists-p runs))
+        (accept-process-output nil 0.05)))
+    (with-temp-buffer
+      (insert-file-contents runs)
+      (count-lines (point-min) (point-max)))))
+
+(ert-deftest openusage-test-refresh-waits-for-live-fetch ()
+  (openusage-tests--with-hanging-program
+    (openusage--refresh nil)
+    (let ((process openusage--process))
+      (should (process-live-p process))
+      (openusage--refresh nil)
+      (should (eq openusage--process process))
+      (accept-process-output nil 0.2)
+      (should (= (openusage-tests--runs) 1)))))
+
+(ert-deftest openusage-test-forced-refresh-replaces-live-fetch ()
+  (openusage-tests--with-hanging-program
+    (openusage--refresh nil)
+    (let ((stale openusage--process)
+          (errors nil))
+      (should (= (openusage-tests--runs) 1))
+      (cl-letf (((symbol-function 'openusage--show-error) (lambda (message) (push message errors))))
+        (openusage--refresh t)
+        (should-not (process-live-p stale))
+        (should-not (eq openusage--process stale))
+        (with-timeout (5 (ert-fail "forced fetch timed out"))
+          (while (or (not openusage--document) (buffer-live-p (process-buffer stale)))
+            (accept-process-output nil 0.05))))
+      ;; The killed fetch's sentinel ran and reported nothing.
+      (should (null errors))
+      (should (string-match-p "Claude · Team 5x" (buffer-string))))))
+
 (ert-deftest openusage-test-fetch-missing-program ()
   (let ((openusage-program "openusage-not-installed-anywhere") result)
     (openusage--fetch nil default-directory nil (lambda (document err) (setq result (list document err))))

@@ -762,13 +762,14 @@ EXIT-STATUS."
   "Run `openusage-program' for PROVIDER in DIRECTORY, then call CALLBACK.
 PROVIDER nil means every enabled provider; FORCE non-nil bypasses the
 shared cache.  DIRECTORY selects the host, so a TRAMP directory runs the
-tool there.  CALLBACK receives (DOCUMENT ERROR).  The process has no
+tool there.  CALLBACK receives (DOCUMENT ERROR).  Return the process,
+or nil when CALLBACK already ran without one.  The process has no
 separate stderr, so OpenUsage's warnings and errors land in the same
 buffer as its JSON, after it."
   (let* ((default-directory (or directory default-directory))
          (remote (file-remote-p default-directory)))
     (if (not (executable-find openusage-program remote))
-        (funcall callback nil (format "%s is not on PATH" openusage-program))
+        (ignore (funcall callback nil (format "%s is not on PATH" openusage-program)))
       (let ((stdout (generate-new-buffer " *openusage-stdout*")))
         (make-process
          :name "openusage"
@@ -790,7 +791,7 @@ buffer as its JSON, after it."
 (defvar-local openusage--timer nil "Poll timer of this buffer.")
 (defvar-local openusage--signature nil "Signature of the last painted document and minute.")
 (defvar-local openusage--last-error nil "Last fetch error reported, so it is not repeated.")
-(defvar-local openusage--fetching nil "Non-nil while a fetch is in flight.")
+(defvar-local openusage--process nil "Process of the latest fetch.")
 (defvar-local openusage--document nil "Last successfully parsed document.")
 (defvar-local openusage--expanded nil "Hash table of provider fold states.")
 
@@ -864,23 +865,33 @@ still repaints once a minute."
 
 (defun openusage--refresh (force)
   "Fetch and repaint, unless a fetch is already in flight.
-FORCE non-nil bypasses the shared cache.  A fetch that signals before
-its process starts, such as a dead TRAMP connection, is reported like
-any other error instead of leaving the buffer stuck."
-  (unless openusage--fetching
-    (setq openusage--fetching t)
-    (let ((buffer (current-buffer)))
+FORCE non-nil bypasses the shared cache and replaces a fetch in
+flight, so a hung one cannot wedge the buffer; only the latest
+fetch's result is shown.  A fetch that signals before its process
+starts, such as a dead TRAMP connection, is reported like any other
+error instead of leaving the buffer stuck."
+  (when (and force (process-live-p openusage--process))
+    (let ((stale openusage--process))
+      (setq openusage--process nil)
+      (delete-process stale)))
+  (unless (process-live-p openusage--process)
+    ;; Cleared first: a fetch that fails at once calls back before it
+    ;; returns, and must match.
+    (setq openusage--process nil)
+    (let ((buffer (current-buffer))
+          process)
       (condition-case err
-          (openusage--fetch
-           openusage--provider openusage--directory force
-           (lambda (document message)
-             (when (buffer-live-p buffer)
-               (with-current-buffer buffer
-                 (setq openusage--fetching nil)
-                 (if message (openusage--show-error message) (openusage--show document))))))
+          (setq process
+                (openusage--fetch
+                 openusage--provider openusage--directory force
+                 (lambda (document message)
+                   (when (buffer-live-p buffer)
+                     (with-current-buffer buffer
+                       (when (eq process openusage--process)
+                         (if message (openusage--show-error message) (openusage--show document))))))))
         (error
-         (setq openusage--fetching nil)
-         (openusage--show-error (error-message-string err)))))))
+         (openusage--show-error (error-message-string err))))
+      (setq openusage--process process))))
 
 (defun openusage--poll (buffer)
   "Refresh BUFFER from the cache while it is visible."
