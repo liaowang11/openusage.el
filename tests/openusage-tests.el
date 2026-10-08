@@ -440,6 +440,30 @@ in the same minute paints, and a revert repaints unchanged data."
           (openusage--revert))
         (should (string-match-p "Claude · Team 5x" (buffer-string)))))))
 
+(ert-deftest openusage-test-repaint-keeps-each-window-entry ()
+  "Every window showing the buffer stays on its own entry across a repaint."
+  (let ((previous (window-buffer)))
+    (unwind-protect
+        (openusage-tests--with-buffer
+          (let* ((top (selected-window))
+                 (bottom (split-window top))
+                 (key-in (lambda (window)
+                           (save-excursion
+                             (goto-char (window-point window))
+                             (openusage--key-at-point)))))
+            (set-window-buffer top (current-buffer))
+            (set-window-buffer bottom (current-buffer))
+            (goto-char (point-min))
+            (forward-line 3)
+            (set-window-point bottom (point-max))
+            (let ((top-key (openusage--key-at-point)))
+              (openusage--repaint)
+              (should (equal (openusage--key-at-point) top-key))
+              (should (equal (funcall key-in top) top-key))
+              (should (equal (funcall key-in bottom) '(resource "zai" "webSearches"))))))
+      (delete-other-windows)
+      (set-window-buffer nil previous))))
+
 (ert-deftest openusage-test-signature-ignores-jitter ()
   (let* ((document (openusage-tests--fixture "combined.json"))
          (touched (copy-tree document)))

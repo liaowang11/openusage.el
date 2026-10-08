@@ -815,14 +815,24 @@ TRAMP copies a remote stderr in after the sentinel runs."
     (goto-char (prop-match-beginning match))))
 
 (defun openusage--repaint ()
-  "Redraw this buffer from its last document, keeping point's entry."
+  "Redraw this buffer from its last document, keeping point's entry.
+Every window showing the buffer keeps its own entry too, since
+`erase-buffer' would move them all to the top."
   (when openusage--document
     (let ((inhibit-read-only t)
           (key (openusage--key-at-point))
+          (windows (mapcar (lambda (window)
+                             (cons window (save-excursion
+                                            (goto-char (window-point window))
+                                            (openusage--key-at-point))))
+                           (get-buffer-window-list nil nil t)))
           (openusage--render-frame (openusage--graphic-frame (current-buffer))))
       (erase-buffer)
       (insert (openusage-render openusage--document (float-time) openusage--expanded
                                 openusage--provider))
+      (pcase-dolist (`(,window . ,window-key) windows)
+        (openusage--goto-key window-key)
+        (set-window-point window (point)))
       (openusage--goto-key key))))
 
 (defun openusage--show (document)
