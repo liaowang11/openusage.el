@@ -98,6 +98,32 @@ FIELDS is a plist of `used' and any other keys to override."
     (should (< (string-search "Session" claude) (string-search "Weekly" claude)
                (string-search "Fable" claude) (string-search "Extra Usage" claude)))))
 
+(defun openusage-tests--headers (text)
+  "Return the first line of each provider section in overview TEXT."
+  (mapcar (lambda (section) (car (split-string section "\n")))
+          (split-string text "\n\n")))
+
+(ert-deftest openusage-test-providers-follow-tool-order-by-default ()
+  (let ((openusage-provider-order nil))
+    (should (equal (openusage-tests--headers (openusage-tests--render "combined.json"))
+                   '("Claude · Team 5x" "Antigravity" "Codex · Plus" "Z.ai · GLM Coding Lite")))))
+
+(ert-deftest openusage-test-providers-follow-configured-order ()
+  "Listed providers come first; a listed id absent from the output is skipped."
+  (let ((openusage-provider-order '("zai" "cursor" "codex")))
+    (should (equal (openusage-tests--headers (openusage-tests--render "combined.json"))
+                   '("Z.ai · GLM Coding Lite" "Codex · Plus" "Claude · Team 5x" "Antigravity")))))
+
+(ert-deftest openusage-test-error-only-provider-follows-configured-order ()
+  (let* ((document (openusage-tests--fixture "combined.json"))
+         (openusage-provider-order '("cursor" "claude")))
+    (setf (alist-get 'errors document) '(((providerId . "cursor") (message . "Not signed in."))))
+    (should (equal (openusage-tests--headers
+                    (substring-no-properties
+                     (openusage-render document openusage-tests--now (make-hash-table :test 'equal))))
+                   '("Cursor  ! Not signed in." "Claude · Team 5x" "Antigravity"
+                     "Codex · Plus" "Z.ai · GLM Coding Lite")))))
+
 (ert-deftest openusage-test-used-display ()
   (let ((openusage-usage-display 'used))
     (openusage-tests--in-zone

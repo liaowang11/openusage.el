@@ -125,6 +125,12 @@ The command line tool sorts resources alphabetically; this puts them
 back in the app's order.  Ids not listed follow, in the tool's order."
   :type '(repeat string))
 
+(defcustom openusage-provider-order nil
+  "Provider ids, such as \"claude\" or \"codex\", in the order to list them.
+Providers not listed follow, in the tool's order.  A listed id the tool
+does not report is skipped."
+  :type '(repeat string))
+
 (defconst openusage--field-type
   '(set (const :tag "Pace verdict beside the label" verdict)
         (const :tag "Progress bar" bar)
@@ -663,6 +669,14 @@ RESOURCE is a (ID . FIELDS) entry; `openusage--fields' picks the rows."
                     (length openusage-resource-order)))))
     (seq-sort-by rank #'< resources)))
 
+(defun openusage--sort-providers (sections)
+  "Return SECTIONS ordered by `openusage-provider-order'.
+Each section is a (PROVIDER-ID . TEXT) pair."
+  (let ((rank (lambda (section)
+                (or (seq-position openusage-provider-order (car section))
+                    (length openusage-provider-order)))))
+    (seq-sort-by rank #'< sections)))
+
 (defun openusage--expanded-p (expanded key)
   "Return the fold state of KEY in hash table EXPANDED.
 A key never folded by hand falls back to `openusage-expand-by-default';
@@ -725,20 +739,22 @@ showing `openusage-detail-fields' instead of `openusage-overview-fields'."
         (sections nil))
     (dolist (entry providers)
       (let ((provider-id (symbol-name (car entry))))
-        (push (openusage--provider-section
-               provider-id (cdr entry)
-               (seq-filter (lambda (err) (equal (alist-get 'providerId err) provider-id)) errors)
-               now expanded detail)
+        (push (cons provider-id
+                    (openusage--provider-section
+                     provider-id (cdr entry)
+                     (seq-filter (lambda (err) (equal (alist-get 'providerId err) provider-id)) errors)
+                     now expanded detail))
               sections)))
     (dolist (err errors)
       (let ((provider-id (or (alist-get 'providerId err) "unknown")))
         (unless (assq (intern provider-id) providers)
-          (push (concat (propertize (openusage--camel-words provider-id) 'face 'openusage-provider)
-                        "  "
-                        (propertize (format "! %s" (or (alist-get 'message err) "No current data."))
-                                    'face 'error))
+          (push (cons provider-id
+                      (concat (propertize (openusage--camel-words provider-id) 'face 'openusage-provider)
+                              "  "
+                              (propertize (format "! %s" (or (alist-get 'message err) "No current data."))
+                                          'face 'error)))
                 sections))))
-    (string-join (nreverse sections) "\n\n")))
+    (string-join (mapcar #'cdr (openusage--sort-providers (nreverse sections))) "\n\n")))
 
 ;;; Fetching, TRAMP-aware
 

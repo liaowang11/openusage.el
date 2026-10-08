@@ -124,6 +124,7 @@ The others:
 - `openusage-bar-width`: card width in columns.
 - `openusage-labels`: resource display names.
 - `openusage-resource-order`: the order resources are listed in.
+- `openusage-provider-order`: the order providers are listed in.
 
 Faces: `openusage-normal`, `openusage-warning`, `openusage-critical`, `openusage-provider`,
 `openusage-label`, `openusage-detail`.
