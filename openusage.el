@@ -619,6 +619,22 @@ Per hour for windows under a day of use so far, else per day."
            (when (and (openusage--field-p 'projection) projection)
              (openusage--detail-line "at reset" projection))))))
 
+(defun openusage--balance-rows (label resource now)
+  "Return the rows of balance RESOURCE under LABEL at NOW, or nil to skip it.
+`openusage--fields' picks the expiry lines and whether an empty balance shows."
+  (when (or (openusage--field-p 'zero-balances)
+            (> (openusage--display-round (alist-get 'available resource) (alist-get 'unit resource)) 0))
+    (string-join
+     (cons (openusage--balance-line label resource now)
+           (and (openusage--field-p 'expiries)
+                (mapcar (lambda (time)
+                          (openusage--detail-line
+                           "expires" (format "%s (%s)"
+                                             (openusage--when-label time now 'exact)
+                                             (openusage--deadline-label nil time now 'countdown))))
+                        (openusage--expiries resource))))
+     "\n")))
+
 (defun openusage--resource-rows (provider-id resource now)
   "Return the rows of RESOURCE under PROVIDER-ID at NOW, or nil to skip it.
 RESOURCE is a (ID . FIELDS) entry; `openusage--fields' picks the rows."
@@ -633,18 +649,7 @@ RESOURCE is a (ID . FIELDS) entry; `openusage--fields' picks the rows."
                                (openusage--card-details fields now))
                          "\n"))
            ((and (equal kind "balance") (alist-get 'available fields))
-            (when (or (openusage--field-p 'zero-balances)
-                      (> (openusage--display-round (alist-get 'available fields) (alist-get 'unit fields)) 0))
-              (string-join
-               (cons (openusage--balance-line label fields now)
-                     (and (openusage--field-p 'expiries)
-                          (mapcar (lambda (time)
-                                    (openusage--detail-line
-                                     "expires" (format "%s (%s)"
-                                                       (openusage--when-label time now 'exact)
-                                                       (openusage--deadline-label nil time now 'countdown))))
-                                  (openusage--expiries fields))))
-               "\n")))
+            (openusage--balance-rows label fields now))
            ((and (equal kind "consumption") (alist-get 'used fields))
             (openusage--usage-line label fields)))))
     (when text
