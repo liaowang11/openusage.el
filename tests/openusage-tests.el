@@ -367,6 +367,30 @@ FIELDS is a plist of `used' and any other keys to override."
     (openusage--repaint)
     (should (equal (openusage--key-at-point) '(resource "zai" "webSearches")))))
 
+(ert-deftest openusage-test-display-refreshes-at-once ()
+  "A window showing the buffer again repaints and fetches immediately,
+not at the next poll tick."
+  (let ((previous (window-buffer))
+        (fetches nil))
+    (unwind-protect
+        (with-temp-buffer
+          (openusage-mode)
+          (openusage--cancel-timer)
+          (setq openusage--document (openusage-tests--fixture "combined.json"))
+          (openusage--repaint)
+          (let ((inhibit-read-only t))
+            (erase-buffer)
+            (insert "stale paint"))
+          (set-window-buffer nil (current-buffer))
+          (cl-letf (((symbol-function 'openusage--fetch)
+                     (lambda (&rest _args) (push (current-buffer) fetches))))
+            (openusage--display))
+          (should (equal fetches (list (current-buffer))))
+          (should (string-match-p "Claude · Team 5x" (buffer-string)))
+          ;; The mode wires the display hook so real redisplay triggers it.
+          (should (memq #'openusage--display window-configuration-change-hook)))
+      (set-window-buffer nil previous))))
+
 (ert-deftest openusage-test-signature-ignores-jitter ()
   (let* ((document (openusage-tests--fixture "combined.json"))
          (touched (copy-tree document)))

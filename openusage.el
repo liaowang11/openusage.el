@@ -863,6 +863,13 @@ any other error instead of leaving the buffer stuck."
     (with-current-buffer buffer
       (openusage--refresh nil))))
 
+(defun openusage--display ()
+  "Freshen this buffer the moment a window shows it again.
+Repaint from the last document so its countdowns are current, and
+start fetching at once instead of waiting for the next poll tick."
+  (openusage--repaint)
+  (openusage--poll (current-buffer)))
+
 (defun openusage--cancel-timer ()
   "Stop this buffer's poll timer."
   (when (timerp openusage--timer)
@@ -950,7 +957,8 @@ DIRECTION is 1 to search forward, -1 backward; the search never wraps."
 (define-derived-mode openusage-mode special-mode "OpenUsage"
   "Major mode for a live OpenUsage buffer.
 The buffer polls OpenUsage's cache every `openusage-poll-interval'
-seconds while visible; \\[revert-buffer] forces a fresh pull.
+seconds while visible; a window showing it again repaints and fetches
+at once.  \\[revert-buffer] forces a fresh pull.
 
 \\{openusage-mode-map}"
   (setq-local revert-buffer-function #'openusage--revert
@@ -958,6 +966,7 @@ seconds while visible; \\[revert-buffer] forces a fresh pull.
               truncate-lines t
               openusage--expanded (make-hash-table :test 'equal))
   (add-hook 'kill-buffer-hook #'openusage--cancel-timer nil t)
+  (add-hook 'window-configuration-change-hook #'openusage--display nil t)
   (setq openusage--timer (run-with-timer openusage-poll-interval openusage-poll-interval
                                          #'openusage--poll (current-buffer))))
 

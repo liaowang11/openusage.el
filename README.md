@@ -27,8 +27,9 @@ That is the terminal rendering; a graphical frame draws each bar as a thin SVG r
   how far into the window you are, burn rate, the projection at reset, every balance and the
   cache age. `RET` on a provider or limit in the overview opens it too.
 
-Both buffers poll OpenUsage's shared five-minute cache while visible. They follow
-`default-directory`, so from a buffer visiting a TRAMP remote they show that host's usage.
+Both buffers poll OpenUsage's shared five-minute cache while visible, and refresh the moment
+a window shows one again after it was buried. They follow `default-directory`, so from a buffer
+visiting a TRAMP remote they show that host's usage.
 
 The bar is an SVG rail in a graphical frame. On a terminal the same text shows as an
 eighth-block glyph bar, so one buffer reads well in both.
