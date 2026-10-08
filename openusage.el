@@ -574,7 +574,7 @@ verdict, bar and reset."
   (concat "  " (openusage--label-column label)
           (openusage--amount (alist-get 'used resource) (alist-get 'unit resource)) " used"))
 
-(defun openusage--detail (field value)
+(defun openusage--detail-line (field value)
   "Return a detail line reading FIELD then VALUE."
   (propertize (format "      %-10s %s" field value) 'face 'openusage-detail))
 
@@ -601,19 +601,19 @@ Per hour for windows under a day of use so far, else per day."
     (delq nil
           (list
            (when (and (openusage--field-p 'used) (not (equal unit "percent")))
-             (openusage--detail "used" (format "%s / %s" (openusage--short-amount used unit)
-                                               (openusage--amount limit unit))))
+             (openusage--detail-line "used" (format "%s / %s" (openusage--short-amount used unit)
+                                                    (openusage--amount limit unit))))
            (when (and (openusage--field-p 'window) window (> (car window) 0) (< (car window) (cdr window)))
-             (openusage--detail "window" (format "%s of %s elapsed (%d%%)"
-                                                 (openusage--compact-duration (car window))
-                                                 (openusage--compact-duration (cdr window))
-                                                 (round (* 100 (/ (car window) (cdr window)))))))
+             (openusage--detail-line "window" (format "%s of %s elapsed (%d%%)"
+                                                      (openusage--compact-duration (car window))
+                                                      (openusage--compact-duration (cdr window))
+                                                      (round (* 100 (/ (car window) (cdr window)))))))
            (when (and (openusage--field-p 'pace) (openusage--pace resource now))
-             (openusage--detail "pace" (format "%.2f× even · %s"
-                                               (/ (/ (float used) limit) (/ (car window) (cdr window)))
-                                               (openusage--rate used (car window) unit))))
+             (openusage--detail-line "pace" (format "%.2f× even · %s"
+                                                    (/ (/ (float used) limit) (/ (car window) (cdr window)))
+                                                    (openusage--rate used (car window) unit))))
            (when (and (openusage--field-p 'projection) projection)
-             (openusage--detail "at reset" projection))))))
+             (openusage--detail-line "at reset" projection))))))
 
 (defun openusage--resource-rows (provider-id resource now)
   "Return the rows of RESOURCE under PROVIDER-ID at NOW, or nil to skip it.
@@ -635,7 +635,7 @@ RESOURCE is a (ID . FIELDS) entry; `openusage--fields' picks the rows."
                (cons (openusage--balance-line label fields now)
                      (and (openusage--field-p 'expiries)
                           (mapcar (lambda (time)
-                                    (openusage--detail
+                                    (openusage--detail-line
                                      "expires" (format "%s (%s)"
                                                        (openusage--when-label time now 'exact)
                                                        (openusage--deadline-label nil time now 'countdown))))
