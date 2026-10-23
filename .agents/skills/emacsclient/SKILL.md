@@ -1,30 +1,55 @@
 ---
 name: emacsclient
-description: 'Always use emacsclient instead of emacs. This applies to all Emacs operations: user requests, byte compilation, check-parens, running ERT tests, and any other elisp evaluation.'
+description: 'Emacs operations: querying or acting in the user''s running Emacs, running ERT, byte compilation or checkdoc on elisp, evaluating elisp against the user''s config, or starting any Emacs process or daemon.'
 allowed-tools: Bash
 ---
 
-# Always use emacsclient
+# Emacs through emacsclient, batch, or a disposable daemon
 
-The user has an Emacs server running. **All** Emacs operations must go through `emacsclient`, never `emacs` or `emacs --batch`. This includes both user-requested actions and agent-initiated operations like byte compilation, syntax checking, or running tests. Run agent-initiated work that changes state or can block in a disposable daemon, not the user's live server; see [Live server or disposable daemon](#live-server-or-disposable-daemon).
+The user has an Emacs server running. Pick the route for each Emacs
+operation by asking two questions in order:
 
-## Examples
+1. Does the answer depend on the user's running session (open buffers,
+   windows, variable values as they are now), or did the user ask for an
+   action in their Emacs? Use the **live server** (`emacsclient`, default
+   socket). See [Live server](#live-server).
+2. Otherwise, does the work need the user's config: their installed
+   packages, the hooks, keymaps and advice their init sets up, or functions
+   it defines?
+   - No: use **batch Emacs** (`emacs -Q --batch`). This covers ERT, byte
+     compilation, checkdoc, and evaluating or debugging a package with
+     only its dependencies loaded. It exits when done. See
+     [Batch Emacs](#batch-emacs).
+   - Yes: use the **disposable daemon** (`scripts/disposable-emacs` in this
+     skill's directory). See [Disposable daemon](#disposable-daemon).
 
+Work that can block or prompt is not by itself a reason for a daemon:
+batch Emacs with a time limit and stdin from `/dev/null` fails fast on
+both.
+
+Start Emacs only through these three routes. A daemon started any other
+way (`emacs --daemon`, `emacsclient --alternate-editor=""`) outlives its
+shell when the tool call times out or the daemon hangs, and a hung daemon
+ignores `(kill-emacs)`.
+
+## Live server
+
+Use the live server only when the answer depends on the user's current
+session, or when the user asked for an action in their Emacs:
+- Read-only queries of session state: open buffers, windows, point, mode,
+  variable values, keymaps and advice as actually loaded.
+- User-requested actions: open a file, jump to a line, hot-patch a function
+  when asked.
+- Pure checks with no side effects, such as `check-parens` in a temp buffer.
+
+Live queries must finish fast: wrap them in
+`(with-timeout (5 (error "probe timeout")) ...)`. If a live call times out,
+stop and tell the user instead of sending more.
+
+Examples:
 - Open a file: `emacsclient --no-wait "/path/to/file"`
-- Evaluate elisp: `emacsclient --eval '(some-function)'`
 - Open at a line: `emacsclient --no-wait +42 "/path/to/file"`
-- Byte compile a file in a fresh disposable daemon:
-  ```bash
-  (
-    set -eu
-    daemon="skill-compile-$(date +%s)-$$"
-    trap 'emacsclient --socket-name="$daemon" --eval "(kill-emacs)" >/dev/null 2>&1 || true' EXIT
-    emacsclient --socket-name="$daemon" --alternate-editor="" --eval 't'
-    emacsclient --socket-name="$daemon" --eval '
-    (unless (byte-compile-file "/path/to/file.el")
-      (error "Byte compilation failed"))'
-  )
-  ```
+- Evaluate elisp: `emacsclient --eval '(some-function)'`
 - Check parentheses:
   ```sh
   emacsclient --eval '
@@ -32,64 +57,99 @@ The user has an Emacs server running. **All** Emacs operations must go through `
     (insert-file-contents "/path/to/file.el")
     (check-parens))'
   ```
-- Run focused ERT tests in a fresh disposable daemon. Use the repository's
-  isolated test runner when one is available; otherwise:
+
+## Batch Emacs
+
+Use `emacs -Q --batch` for work that doesn't need the user's config. Prefer
+the repository's own test runner when it has one. Otherwise put the
+repository first on the load path, then each dependency's directory (where
+the user's package manager installed it, for example under `elpa/` or
+`straight/build-*/`), and set `load-prefer-newer` so a stale `.elc` doesn't
+shadow its source. Run it under `timeout` with `</dev/null`, so a prompt
+reads end-of-file and errors out instead of waiting.
+
+Batch Emacs sets `noninteractive` to t, and code may behave differently
+because of that. When that matters, use the disposable daemon.
+
+- Run focused ERT tests (the exit code is non-zero on failure):
   ```bash
-  (
-    set -eu
-    daemon="skill-ert-$(date +%s)-$$"
-    trap 'emacsclient --socket-name="$daemon" --eval "(kill-emacs)" >/dev/null 2>&1 || true' EXIT
-    emacsclient --socket-name="$daemon" --alternate-editor="" --eval 't'
-    emacsclient --socket-name="$daemon" --eval '
-    (progn
-      (require (quote ert))
-      (load "/path/to/test-file.el" nil t)
-      (let ((stats (ert-run-tests-batch "pattern")))
-        (when (zerop (ert-stats-total stats))
-          (error "No ERT tests matched"))
-        (unless (zerop (ert-stats-completed-unexpected stats))
-          (error "ERT tests failed"))
-        (list :passed (ert-stats-total stats))))'
-  )
+  emacs -Q --batch -L . -L /path/to/dependency \
+    --eval '(setq load-prefer-newer t)' \
+    -l ert -l tests/foo-tests.el \
+    --eval '(ert-run-tests-batch-and-exit "pattern")'
   ```
+- Byte compile:
+  ```bash
+  emacs -Q --batch -L . -L /path/to/dependency \
+    --eval '(setq byte-compile-error-on-warn t)' \
+    -f batch-byte-compile foo.el
+  ```
+  Delete the resulting `.elc` afterwards unless the repository tracks it.
+- Checkdoc:
+  ```bash
+  emacs -Q --batch --eval '(checkdoc-file "foo.el")'
+  ```
+  The exit code is 0 even when checkdoc warns; read stderr for `foo.el:`
+  lines.
 
-## Live server or disposable daemon
+## Disposable daemon
 
-Use the live server (default socket) only when the answer depends on the
-user's current session, or when the user asked for an action in their Emacs:
-- Read-only queries of session state: open buffers, windows, point, mode,
-  variable values, keymaps and advice as actually loaded.
-- User-requested actions: open a file, jump to a line, hot-patch a function
-  when asked.
-- Pure checks with no side effects, such as `check-parens` in a temp buffer.
+Use `scripts/disposable-emacs` when the work needs the user's config but
+must not change or block the live session. For example:
+- trying a fix or hot-patch against the user's config before applying it
+  live;
+- reproducing a bug that only shows with the user's packages or settings;
+- checking how the user's config sets up a mode, keymap or hook from
+  scratch;
+- code that behaves differently when `noninteractive` is t.
 
-Use a disposable daemon (`--socket-name=NAME --alternate-editor=""`; it loads
-the full config) for everything else, in particular anything that:
-- runs tests or byte-compiles;
-- loads or evaluates code under development (`load`, `defun`, `setq` on
-  globals, `advice-add`, hooks, enabling modes), since that changes the
-  user's session;
-- can block: network, subprocesses, timers, waiting on input, profiling, or
-  loops over all buffers;
-- can prompt: `read-*`, `completing-read`, `y-or-n-p`, or any minibuffer use.
+Write the elisp to one or more files with a quoted heredoc and pass them to
+the script. It starts a fresh daemon with the user's config, evaluates each
+file's forms in order in that daemon, prints the value of each file's last
+form, and then stops the daemon:
 
-Live queries must also finish fast: wrap them in
-`(with-timeout (5 (error "probe timeout")) ...)`.
+```bash
+cat >/tmp/probe.el <<'EOF'
+(load "/path/to/repo/foo.el" nil t)
+(list :mode (foo-mode-p) :hooks foo-mode-hook)
+EOF
+/path/to/this/skill/scripts/disposable-emacs -i -t 120 /tmp/probe.el
+```
+
+Pass `-i` (experimental) unless you have a reason not to. The daemon then
+writes its state (histories, bookmarks, workspaces, caches) into a
+throwaway copy-on-write clone of the user's Emacs directory instead of the
+real one. On macOS a `sandbox-exec` profile also blocks writes under
+`$HOME`, except to package build directories, `~/Library/Caches`, and
+directories you allow with `-w DIR`. Isolation works for any config.
+Doom is detected and gets its `DOOMLOCALDIR` cloned. Other configs get
+their `user-emacs-directory` cloned through `--init-directory`, which
+needs Emacs 29+. Without `-i`, the daemon reads and writes the user's real
+state files while it runs. If a run fails only with `-i`, say so.
+
+- Files share one daemon, so a later file sees what an earlier one defined.
+- A failing form makes the script exit non-zero with the error on stderr.
+- `-t SECONDS` limits each file (default 300); `-s` limits startup (default
+  120); `-l` is the daemon's maximum lifetime (default 3600).
+- The script stops the daemon with `(kill-emacs)`, or SIGKILL when that
+  fails, and prints how it stopped. The daemon also stops itself when the
+  script is gone. Neither way runs `kill-emacs-hook`, so the user's
+  bookmarks, workspaces and histories are not saved from the daemon.
+- Each run first sweeps up daemons, clones and files left by earlier runs;
+  `disposable-emacs sweep` does only that.
+- Keep printed values small. `emacsclient` garbles long or multibyte
+  results, so write large output to a file from the elisp and read the file.
 
 ## Rules
 
-- Always use `emacsclient`, never `emacs` or `emacs --batch`.
-- Never run ERT in the user's interactive server. Start a fresh named daemon,
-  address every test and cleanup call to its socket, and stop only that daemon.
-- Do not use `ert-run-tests-batch-and-exit` through `emacsclient`; it exits the
-  server. Use `ert-run-tests-batch` and report unexpected results as errors.
+- Keep `ert-run-tests-batch-and-exit` and `kill-emacs` away from the live
+  server: both exit it. Batch Emacs and the disposable daemon are where
+  they belong.
 - Use `--no-wait` when opening files so the command returns immediately.
-- Use `--eval` when evaluating elisp.
-- Always format `--eval` elisp across multiple lines with proper indentation.
-- Inline `--eval` breaks when the elisp contains `'` (`'sym`, `#'fn`). Write such
-  elisp to `/tmp/<name>.el` with a quoted heredoc (`<<'EOF'`) and run
+- Format `--eval` elisp across multiple lines with proper indentation.
+- Inline `--eval` breaks when the elisp contains `'` (`'sym`, `#'fn`). Write
+  such elisp to `/tmp/<name>.el` with a quoted heredoc (`<<'EOF'`) and run
   `emacsclient --eval '(load "/tmp/<name>.el" nil t)'`.
-- On macOS, `can't find socket` means the sandbox changed `TMPDIR`; rerun with
-  `export TMPDIR=$(getconf DARWIN_USER_TEMP_DIR)`. The first call that starts a
-  disposable daemon prints the same message before starting it; that is expected.
-- Run `emacsclient` commands via the Bash tool.
+- On macOS, `can't find socket` from the live server means the sandbox
+  changed `TMPDIR`; rerun with `export TMPDIR=$(getconf DARWIN_USER_TEMP_DIR)`.
+- Run Emacs commands via the Bash tool.

@@ -1,0 +1,333 @@
+#!/usr/bin/env bash
+# Run elisp files in a fresh Emacs daemon that loads the user's config, then
+# stop the daemon however it takes.
+#
+# Usage:
+#   disposable-emacs [-i] [-w DIR] [-t SECONDS] [-s SECONDS] [-l SECONDS] FILE.el...
+#   disposable-emacs sweep
+#
+# Each FILE is read and its forms evaluated in order, lexically, in the same
+# daemon; the value of each file's last form is printed.  Keep values small:
+# write large output to a file from the elisp instead.
+#
+#   -t SECONDS  limit for each FILE (default 300)
+#   -s SECONDS  limit for the daemon to start (default 120)
+#   -l SECONDS  lifetime after which the daemon stops itself (default 3600)
+#   -i          isolate the daemon from the user's saved state (see below)
+#   -w DIR      with -i, also let the daemon write under DIR (repeatable)
+#
+# Isolation (-i, experimental): the daemon writes its state into a
+# copy-on-write clone of the user's Emacs directory, removed afterwards.
+# Packages and native-comp output link back to the real ones, so they load
+# as usual and nothing is rebuilt.
+#   - Doom (detected by lisp/doom.el or core/core.el): the clone is
+#     DOOMLOCALDIR, with straight/, etc/@ and cache/eln linked.
+#   - Any other config (needs Emacs 29+): the clone is passed as
+#     --init-directory, with package and build directories linked
+#     (elpa, straight, elpaca, eln-cache, ...).
+# The Emacs directory is the one Emacs itself picks (~/.emacs.d if it
+# exists, else $XDG_CONFIG_HOME/emacs); $DISPOSABLE_EMACS_INIT_DIR overrides
+# it.  On macOS the daemon also runs under sandbox-exec, which denies writes
+# under $HOME except the linked build directories, ~/Library/Caches and -w
+# DIRs, so a writer that ignores the clone fails instead of clobbering the
+# user's files.
+#
+# Stopping empties kill-emacs-hook and calls (kill-emacs) over the socket,
+# else sends SIGKILL, and removes the socket file.  Either way the user's
+# exit-time savers (bookmarks, workspaces, histories, caches) don't run, so
+# the daemon can't write its state over the live session's.  SIGTERM is
+# skipped: Emacs would run the hook on it.  The daemon also stops itself
+# the same way when this script's process is gone (it was killed before
+# its trap ran) or its lifetime runs out.
+#
+# `sweep' stops daemons left by earlier runs whose script is gone.  Every
+# run sweeps first.
+
+set -uo pipefail
+
+prefix="disposable-emacs"
+dir="${DISPOSABLE_EMACS_DIR:-/tmp/$prefix-$(id -u)}"
+
+log() { printf '%s: %s\n' "$prefix" "$*" >&2; }
+
+# Whether PID is gone.  A reaped child or a zombie counts as gone.
+gone() {
+  local stat
+  stat="$(ps -o stat= -p "$1" 2>/dev/null)" || return 0
+  [[ -z "$stat" || "$stat" == Z* ]]
+}
+
+# Wait up to $2 seconds for PID $1 to be gone.
+wait_gone() {
+  local i
+  for ((i = 0; i < $2 * 10; i++)); do
+    gone "$1" && return 0
+    sleep 0.1
+  done
+  gone "$1"
+}
+
+# Stop the daemon PID $1 listening on socket $2.  Print how it stopped.
+stop_daemon() {
+  local pid="$1" socket="$2" how
+  if gone "$pid"; then
+    how="already exited"
+  elif timeout 5 emacsclient --socket-name="$socket" \
+         --eval '(progn (setq kill-emacs-hook nil) (kill-emacs))' \
+         >/dev/null 2>&1 && wait_gone "$pid" 5; then
+    how="kill-emacs"
+  else
+    kill -KILL "$pid" 2>/dev/null
+    wait_gone "$pid" 2
+    how="SIGKILL"
+  fi
+  rm -f -- "${socket:?}"
+  if gone "$pid"; then
+    log "stopped ${socket##*/} (pid $pid) via $how"
+  else
+    log "FAILED to stop ${socket##*/} (pid $pid)"
+    return 1
+  fi
+}
+
+sweep() {
+  local pid cmd name owner status=0
+  # Only an Emacs started by this script: its argv begins with the emacs
+  # binary and our --fg-daemon socket.  A looser match also hits any shell
+  # whose command line merely mentions a daemon name.
+  local daemon_re="^([^ ]*/)?emacs[^ /]* --fg-daemon=$dir/($prefix-[0-9]+-([0-9]+))( |$)"
+  while read -r pid cmd; do
+    [[ "$cmd" =~ $daemon_re ]] || continue
+    name="${BASH_REMATCH[2]}"
+    owner="${BASH_REMATCH[3]}"
+    kill -0 "$owner" 2>/dev/null && continue
+    stop_daemon "$pid" "$dir/$name" || status=1
+  done < <(ps -axo pid=,command=)
+  # Sockets, helpers and logs of runs whose script is gone.
+  local file
+  for file in "$dir/$prefix"-*; do
+    [[ "${file##*/}" =~ ^$prefix-[0-9]+-([0-9]+)(-helper\.el|\.log|\.sb|-local)?$ ]] || continue
+    kill -0 "${BASH_REMATCH[1]}" 2>/dev/null || rm -rf -- "${file:?}"
+  done
+  return "$status"
+}
+
+usage() {
+  sed -n '2,/^$/s/^# \{0,1\}//p' "$0" >&2
+  exit 2
+}
+
+{ mkdir -p "$dir" && chmod 700 "$dir"; } || exit 1
+
+if [[ "${1:-}" == "sweep" ]]; then
+  sweep
+  exit
+fi
+
+eval_timeout=300
+start_timeout=120
+lifetime=3600
+isolate=""
+writable=()
+while getopts "t:s:l:iw:h" opt; do
+  case "$opt" in
+    t) eval_timeout="$OPTARG" ;;
+    s) start_timeout="$OPTARG" ;;
+    l) lifetime="$OPTARG" ;;
+    i) isolate=1 ;;
+    w) writable+=("$(cd "$OPTARG" && pwd -P)") || exit 2 ;;
+    *) usage ;;
+  esac
+done
+shift $((OPTIND - 1))
+(($# > 0)) || usage
+
+files=()
+for file in "$@"; do
+  [[ -r "$file" ]] || { log "cannot read $file"; exit 2; }
+  files+=("$(cd "$(dirname "$file")" && pwd)/$(basename "$file")")
+done
+
+sweep
+
+name="$prefix-$(date +%s)-$$"
+socket="$dir/$name"
+helper="$dir/$name-helper.el"
+daemon_log="$dir/$name.log"
+overlay="$dir/$name-local"
+profile="$dir/$name.sb"
+pid=""
+
+cleanup() {
+  local status=$?
+  if [[ -n "$pid" ]]; then
+    stop_daemon "$pid" "$socket" || status=1
+  fi
+  rm -f -- "${helper:?}" "${daemon_log:?}" "${profile:?}"
+  rm -rf -- "${overlay:?}"
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+
+cat >"$helper" <<'EOF'
+;;; -*- lexical-binding: t -*-
+;; Loaded by disposable-emacs after the user's init.
+
+(defun disposable-emacs-exit ()
+  "Exit without running `kill-emacs-hook'.
+The user's config fills the hook with savers for bookmarks, workspaces,
+histories and caches; a throwaway daemon must not write its view of
+those over the live session's.  Emptying the hook once at load is not
+enough: startup hooks run after this file and add to it again."
+  (setq kill-emacs-hook nil)
+  (kill-emacs 1))
+
+(let ((owner (string-to-number (getenv "DISPOSABLE_EMACS_OWNER")))
+      (lifetime (string-to-number (getenv "DISPOSABLE_EMACS_LIFETIME"))))
+  ;; Stop when the script that started this daemon is gone.  A killed
+  ;; script stays a zombie until its parent reaps it; that counts as gone.
+  (run-with-timer 5 5 (lambda ()
+                        (let ((attrs (process-attributes owner)))
+                          (when (or (null attrs)
+                                    (equal (alist-get 'state attrs) "Z"))
+                            (disposable-emacs-exit)))))
+  (run-with-timer lifetime nil #'disposable-emacs-exit))
+
+(defun disposable-emacs-eval-file (file)
+  "Evaluate FILE's forms in order, lexically, and return the last value."
+  (let ((forms (with-temp-buffer
+                 (insert-file-contents file)
+                 (let (forms)
+                   (condition-case nil
+                       (while t (push (read (current-buffer)) forms))
+                     (end-of-file nil))
+                   (nreverse forms))))
+        value)
+    (dolist (form forms value)
+      (setq value (eval form t)))))
+EOF
+
+# Clone SRC to DST copy-on-write where the filesystem allows it.
+clone() {
+  if [[ "$(uname)" == Darwin ]]; then
+    /bin/cp -cRp "$1" "$2"
+  else
+    cp -a --reflink=auto "$1" "$2"
+  fi
+}
+
+# Clone directory $1 into $2, linking the entries named in the remaining
+# arguments (paths relative to $1) instead of copying them.  A directory
+# that holds a linked entry is recreated and cloned entry by entry.
+overlay_dir() {
+  local src="$1" dst="$2" entry base link nested
+  shift 2
+  mkdir -p "$dst" || return 1
+  for entry in "$src"/* "$src"/.[!.]*; do
+    [[ -e "$entry" ]] || continue
+    base="${entry##*/}"
+    nested=()
+    for link in "$@"; do
+      [[ "$link" == "$base" ]] && { ln -s "$entry" "$dst/$base"; continue 2; }
+      [[ "$link" == "$base"/* ]] && nested+=("${link#"$base"/}")
+    done
+    if ((${#nested[@]})) && [[ -d "$entry" && ! -L "$entry" ]]; then
+      overlay_dir "$entry" "$dst/$base" "${nested[@]}" || return 1
+    else
+      clone "$entry" "$dst/$base" || return 1
+    fi
+  done
+}
+
+# Seatbelt profile: deny writes under $HOME except the given directories.
+write_profile() {
+  local home allow="" w
+  home="$(cd "$HOME" && pwd -P)"
+  for w in "$@"; do
+    [[ -d "$w" ]] && allow+=" (subpath \"$(cd "$w" && pwd -P)\")"
+  done
+  cat >"$profile" <<EOF
+(version 1)
+(allow default)
+(deny file-write* (subpath "$home"))
+(allow file-write*$allow)
+EOF
+}
+
+launcher=()
+emacs_args=()
+if [[ -n "$isolate" ]]; then
+  init_dir="${DISPOSABLE_EMACS_INIT_DIR:-}"
+  if [[ -z "$init_dir" ]]; then
+    if [[ -d "$HOME/.emacs.d" ]]; then
+      init_dir="$HOME/.emacs.d"
+    else
+      init_dir="${XDG_CONFIG_HOME:-$HOME/.config}/emacs"
+    fi
+  fi
+  init_dir="$(cd "$init_dir" 2>/dev/null && pwd -P)" \
+    || { log "no Emacs directory to isolate"; exit 1; }
+  keep_writable=("$HOME/Library/Caches" "${writable[@]}")
+  if [[ -f "$init_dir/lisp/doom.el" || -f "$init_dir/core/core.el" ]]; then
+    real_local="${DOOMLOCALDIR:-$init_dir/.local}"
+    real_local="$(cd "$real_local" && pwd -P)" || { log "no Doom local dir"; exit 1; }
+    overlay_dir "$real_local" "$overlay" straight etc/@ cache/eln \
+      || { log "could not build $overlay"; exit 1; }
+    export DOOMLOCALDIR="$overlay/"
+    keep_writable+=("$real_local/cache/eln")
+  else
+    major="$(emacs --batch --eval '(princ emacs-major-version)' 2>/dev/null)"
+    ((${major:-0} >= 29)) || { log "-i needs Emacs 29+ for --init-directory"; exit 1; }
+    builds=(elpa straight elpaca eln-cache quelpa el-get tree-sitter .git)
+    overlay_dir "$init_dir" "$overlay" "${builds[@]}" \
+      || { log "could not build $overlay"; exit 1; }
+    emacs_args+=(--init-directory="$overlay")
+    keep_writable+=("$init_dir/eln-cache")
+  fi
+  if command -v sandbox-exec >/dev/null; then
+    write_profile "${keep_writable[@]}"
+    launcher=(sandbox-exec -f "$profile")
+  else
+    log "sandbox-exec not found; isolating by the cloned directory only"
+  fi
+fi
+
+DISPOSABLE_EMACS_OWNER=$$ DISPOSABLE_EMACS_LIFETIME="$lifetime" \
+  "${launcher[@]}" emacs "${emacs_args[@]}" --fg-daemon="$socket" -l "$helper" \
+  </dev/null >"$daemon_log" 2>&1 &
+pid=$!
+# Not a job of this shell: bash would report a SIGKILL as "Killed: 9".
+disown "$pid"
+
+started=""
+for ((i = 0; i < start_timeout * 10; i++)); do
+  if [[ -S "$socket" ]]; then
+    started=1
+    break
+  fi
+  gone "$pid" && break
+  sleep 0.1
+done
+if [[ -z "$started" ]] \
+     || ! timeout 10 emacsclient --socket-name="$socket" --eval t >/dev/null 2>&1; then
+  log "daemon did not start; last log lines:"
+  tail -n 20 "$daemon_log" >&2
+  exit 1
+fi
+
+for file in "${files[@]}"; do
+  quoted="${file//\\/\\\\}"
+  quoted="${quoted//\"/\\\"}"
+  timeout "$eval_timeout" emacsclient --socket-name="$socket" \
+    --eval "(disposable-emacs-eval-file \"$quoted\")"
+  status=$?
+  if ((status == 124)); then
+    log "$file timed out after ${eval_timeout}s"
+    exit 124
+  elif ((status != 0)); then
+    log "$file failed (exit $status)"
+    exit "$status"
+  fi
+done
