@@ -18,12 +18,13 @@
 
 ;; A live view of the `openusage' command line tool from OpenUsage
 ;; (https://github.com/robinebers/openusage), which reports AI coding
-;; plan limits as `openusage.limits.v1' JSON.
+;; plan limits as `openusage.limits.v2' JSON.  The tool prints what the
+;; app last fetched; the app itself refreshes every five minutes.
 ;;
 ;; - `openusage' opens the overview: one card per limit, laid out like
 ;;   the app's: the pace verdict (running out, cutting it close), a
 ;;   progress bar, then the amount left and when it resets.
-;; - `openusage-provider' opens one provider in detail: reset times,
+;; - `openusage-provider' opens one account in detail: reset times,
 ;;   raw counts, window progress, burn rate and the end-of-window
 ;;   projection, every balance and the cache age.
 ;;
@@ -31,11 +32,11 @@
 ;; buffer visiting a TRAMP remote shows that host's usage.  The pace
 ;; rules, colours and wording port the OpenUsage app's own meter logic.
 ;;
-;; In either buffer: TAB folds the provider at point, S-TAB cycles every
-;; provider like `org-shifttab', RET opens the provider at point in its
-;; detail buffer (or refreshes with nothing at point), `n' and `p' move
-;; between providers, `g' forces a refresh and `q' quits.  `imenu'
-;; lists the providers.
+;; In either buffer: TAB folds the account at point, S-TAB cycles every
+;; account like `org-shifttab', RET opens the account at point in its
+;; detail buffer (or re-reads with nothing at point), `n' and `p' move
+;; between accounts, `g' re-reads and `q' quits.  `imenu' lists the
+;; accounts.
 
 ;;; Code:
 
@@ -57,9 +58,10 @@
 
 (defcustom openusage-poll-interval 5
   "Seconds between polls of a visible OpenUsage buffer.
-Polls read OpenUsage's shared five-minute cache, so locally they are
-cheap; on a remote host each one is a round trip over TRAMP.  A hidden
-buffer, or one whose TRAMP connection is closed, is not polled."
+Each poll runs the command line tool, which prints what the app last
+fetched; the app refreshes on its own five-minute schedule.  Locally a
+poll is cheap; on a remote host each one is a round trip over TRAMP.  A
+hidden buffer, or one whose TRAMP connection is closed, is not polled."
   :type 'number)
 
 (defcustom openusage-expand-by-default t
@@ -114,7 +116,7 @@ title-cased, so \"webSearches\" reads \"Web Searches\"."
 
 (defcustom openusage-resource-order
   '("session" "daily" "weekly" "monthly"
-    "geminiSession" "geminiWeekly" "nonGeminiSession" "nonGeminiWeekly"
+    "geminiSession" "geminiWeekly" "argonWeekly" "nonGeminiSession" "nonGeminiWeekly"
     "sonnet" "fable" "spark" "sparkWeekly"
     "totalUsage" "grokBot" "autoUsage" "apiUsage" "premiumCredits"
     "chat" "completions" "webSearches" "requests" "keyLimit"
@@ -126,9 +128,10 @@ back in the app's order.  Ids not listed follow, in the tool's order."
   :type '(repeat string))
 
 (defcustom openusage-provider-order nil
-  "Provider ids, such as \"claude\" or \"codex\", in the order to list them.
-Providers not listed follow, in the tool's order.  A listed id the tool
-does not report is skipped."
+  "Account ids, or provider kinds such as \"claude\", in the order to list them.
+An account id like \"codex@1a2b3c4d\" matches that account only; a kind
+matches every account of that kind.  Accounts not matched follow, in
+the tool's order.  A listed id the tool does not report is skipped."
   :type '(repeat string))
 
 (defconst openusage--field-type
@@ -180,7 +183,7 @@ The label and the amount left or used always show."
   '((t :inherit error))
   "Face for a limit spent or projected to run out before it resets.")
 
-(defconst openusage--schema "openusage.limits.v1"
+(defconst openusage--schema "openusage.limits.v2"
   "The only JSON schema this package reads.")
 
 ;;; Formatting
@@ -197,11 +200,19 @@ The label and the amount left or used always show."
                                                        "\\1 \\2" id))
                " ")))
 
+(defun openusage--provider-kind (provider-id)
+  "Return the provider kind of account id PROVIDER-ID.
+The tool keys accounts as \"codex@1a2b3c4d\"; the kind is the part
+before the \"@\", so labels and ordering can match a whole provider."
+  (car (split-string provider-id "@")))
+
 (defun openusage--label (provider-id resource-id)
   "Return the display label of RESOURCE-ID under PROVIDER-ID."
-  (or (cdr (assoc (format "%s.%s" provider-id resource-id) openusage-labels))
-      (cdr (assoc resource-id openusage-labels))
-      (openusage--camel-words resource-id)))
+  (let ((kind (openusage--provider-kind provider-id)))
+    (or (cdr (assoc (format "%s.%s" provider-id resource-id) openusage-labels))
+        (cdr (assoc (format "%s.%s" kind resource-id) openusage-labels))
+        (cdr (assoc resource-id openusage-labels))
+        (openusage--camel-words resource-id))))
 
 (defun openusage--compact-duration (seconds)
   "Format SECONDS like the app: \"2d 6h\", \"4h 22m\", \"4h\" or \"5m\".
@@ -671,10 +682,13 @@ RESOURCE is a (ID . FIELDS) entry; `openusage--fields' picks the rows."
 
 (defun openusage--sort-providers (sections)
   "Return SECTIONS ordered by `openusage-provider-order'.
-Each section is a (PROVIDER-ID . TEXT) pair."
+Each section is a (PROVIDER-ID . TEXT) pair.  An entry matches an
+account id exactly, or every account of a provider kind."
   (let ((rank (lambda (section)
-                (or (seq-position openusage-provider-order (car section))
-                    (length openusage-provider-order)))))
+                (let ((id (car section)))
+                  (or (seq-position openusage-provider-order id)
+                      (seq-position openusage-provider-order (openusage--provider-kind id))
+                      (length openusage-provider-order))))))
     (seq-sort-by rank #'< sections)))
 
 (defun openusage--expanded-p (expanded key)
@@ -683,10 +697,10 @@ A key never folded by hand falls back to `openusage-expand-by-default';
 one folded to nil stays folded."
   (gethash key expanded openusage-expand-by-default))
 
-(defun openusage--provider-section (provider-id provider errors now expanded detail)
+(defun openusage--provider-section (provider-id provider now expanded detail)
   "Return the section of PROVIDER under PROVIDER-ID at NOW.
-ERRORS are its refresh errors, EXPANDED the fold table, and DETAIL
-non-nil renders the detail buffer's fuller form."
+EXPANDED is the fold table, and DETAIL non-nil renders the detail
+buffer's fuller form."
   (let* ((key (cons 'provider provider-id))
          (open (or detail (openusage--expanded-p expanded key)))
          (plan (alist-get 'plan provider))
@@ -709,10 +723,6 @@ non-nil renders the detail buffer's fuller form."
                        (format-time-string "%H:%M:%S" (openusage--parse-timestamp (alist-get 'expiresAt provider))))
                'face 'openusage-detail)
               lines))
-      (dolist (err errors)
-        (push (propertize (format "  ! %s" (or (alist-get 'message err) "Refresh failed."))
-                          'face 'error)
-              lines))
       (when-let* ((resources (openusage--sort-resources (alist-get 'resources provider)))
                   (openusage--label-width
                    (apply #'max 12 (mapcar (lambda (resource)
@@ -727,43 +737,33 @@ non-nil renders the detail buffer's fuller form."
     (string-join (nreverse lines) "\n")))
 
 (defun openusage-render (document now expanded &optional detail)
-  "Render DOCUMENT, parsed `openusage.limits.v1' JSON, at float time NOW.
+  "Render DOCUMENT, parsed `openusage.limits.v2' JSON, at float time NOW.
 EXPANDED is a hash table of provider fold states.  DETAIL non-nil
 renders as the detail buffer does: every provider open, spaced out, and
 showing `openusage-detail-fields' instead of `openusage-overview-fields'."
   (unless (equal (alist-get 'schema document) openusage--schema)
     (error "Unsupported OpenUsage schema: %S" (alist-get 'schema document)))
   (let ((providers (alist-get 'providers document))
-        (errors (alist-get 'errors document))
         (openusage--fields (if detail openusage-detail-fields openusage-overview-fields))
         (sections nil))
+    (unless providers
+      (push (cons "" (propertize "OpenUsage has not fetched any account yet; open the app and add or refresh one."
+                                 'face 'openusage-warning))
+            sections))
     (dolist (entry providers)
       (let ((provider-id (symbol-name (car entry))))
         (push (cons provider-id
-                    (openusage--provider-section
-                     provider-id (cdr entry)
-                     (seq-filter (lambda (err) (equal (alist-get 'providerId err) provider-id)) errors)
-                     now expanded detail))
+                    (openusage--provider-section provider-id (cdr entry) now expanded detail))
               sections)))
-    (dolist (err errors)
-      (let ((provider-id (or (alist-get 'providerId err) "unknown")))
-        (unless (assq (intern provider-id) providers)
-          (push (cons provider-id
-                      (concat (propertize (openusage--camel-words provider-id) 'face 'openusage-provider)
-                              "  "
-                              (propertize (format "! %s" (or (alist-get 'message err) "No current data."))
-                                          'face 'error)))
-                sections))))
     (string-join (mapcar #'cdr (openusage--sort-providers (nreverse sections))) "\n\n")))
 
 ;;; Fetching, TRAMP-aware
 
 (defun openusage--parse-output (buffer exit-status callback)
   "Parse BUFFER's JSON and call CALLBACK with (DOCUMENT ERROR).
-OpenUsage exits nonzero on a partial refresh failure yet still prints
-usable JSON, so only a parse failure counts as an error.  Its message
-is the first line of output that is not JSON, else one naming
-EXIT-STATUS."
+The tool prints the envelope even when nothing has been fetched yet
+\(exit 4), so usable JSON is never an error.  Otherwise the message is
+the first line of output that is not JSON, else one naming EXIT-STATUS."
   (let ((document (with-current-buffer buffer
                     (goto-char (point-min))
                     (ignore-errors (json-parse-buffer :object-type 'alist :array-type 'list :null-object nil)))))
@@ -776,21 +776,21 @@ EXIT-STATUS."
                   ((and line (not (consp document))) (string-remove-prefix "openusage: " line))
                   (t (format "%s exited %d with no usable output" openusage-program exit-status))))))))
 
-(defun openusage--fetch (provider directory force callback)
+(defun openusage--fetch (provider directory callback)
   "Run `openusage-program' for PROVIDER in DIRECTORY, then call CALLBACK.
-PROVIDER nil means every enabled provider; FORCE non-nil bypasses the
-shared cache.  DIRECTORY selects the host, so a TRAMP directory runs the
-tool there.  CALLBACK receives (DOCUMENT ERROR).  Return the process,
-or nil when CALLBACK already ran without one.  The process has no
-separate stderr, so OpenUsage's warnings and errors land in the same
-buffer as its JSON, after it."
+PROVIDER nil means every account; an account id selects one account
+and a provider kind every account of that kind.  DIRECTORY selects the
+host, so a TRAMP directory runs the tool there.  CALLBACK receives
+\(DOCUMENT ERROR).  Return the process, or nil when CALLBACK already
+ran without one.  The process has no separate stderr, so the tool's
+warnings and errors land in the same buffer as its JSON, after it."
   (let ((default-directory (or directory default-directory))
         (stdout (generate-new-buffer " *openusage-stdout*")))
     (condition-case err
         (make-process
          :name "openusage"
          :buffer stdout
-         :command (append (list openusage-program) (and provider (list provider)) (and force (list "--force")))
+         :command (append (list openusage-program) (and provider (list provider)))
          :file-handler t
          :noquery t
          :sentinel
@@ -818,20 +818,13 @@ buffer as its JSON, after it."
 (defvar-local openusage--document nil "Last successfully parsed document.")
 (defvar-local openusage--expanded nil "Hash table of provider fold states.")
 
-(defun openusage--truncate-timestamps (value)
-  "Return VALUE with fractional seconds dropped from every timestamp."
-  (cond
-   ((and (consp value) (consp (car value)) (symbolp (caar value)) (caar value))
-    (mapcar (lambda (pair) (cons (car pair) (openusage--truncate-timestamps (cdr pair)))) value))
-   ((listp value) (mapcar #'openusage--truncate-timestamps value))
-   ((and (stringp value) (string-match "\\`\\([0-9-]+T[0-9:]+\\)\\.[0-9]+Z\\'" value))
-    (concat (match-string 1 value) "Z"))
-   (t value)))
-
 (defun openusage--document-signature (document)
-  "Return DOCUMENT's data, ignoring `generatedAt' and sub-second jitter."
-  (openusage--truncate-timestamps
-   (list (alist-get 'providers document) (alist-get 'errors document))))
+  "Return DOCUMENT's provider data, ignoring `generatedAt'.
+The tool re-stamps `generatedAt' on every read while the fetched data
+stands still, so it must not count as a change.  The timestamps inside
+the data keep their full precision: dropping fractions would hide a
+refresh landing in the same second."
+  (alist-get 'providers document))
 
 (defun openusage--key-at-point ()
   "Return the `openusage-key' of the line at point."
@@ -888,11 +881,11 @@ still repaints once a minute."
 
 (defun openusage--refresh (force)
   "Fetch and repaint, unless a fetch is already in flight.
-FORCE non-nil bypasses the shared cache and replaces a fetch in
-flight, so a hung one cannot wedge the buffer; only the latest
-fetch's result is shown.  A fetch that signals before its process
-starts, such as a dead TRAMP connection, is reported like any other
-error instead of leaving the buffer stuck."
+FORCE non-nil replaces a fetch in flight and repaints even unchanged
+data, so a hung fetch cannot wedge the buffer and a manual re-read
+always paints; only the latest fetch's result is shown.  A fetch that
+signals before its process starts, such as a dead TRAMP connection, is
+reported like any other error instead of leaving the buffer stuck."
   (when (and force (process-live-p openusage--process))
     (let ((stale openusage--process))
       (setq openusage--process nil)
@@ -906,7 +899,7 @@ error instead of leaving the buffer stuck."
       (condition-case err
           (setq process
                 (openusage--fetch
-                 openusage--provider openusage--directory force
+                 openusage--provider openusage--directory
                  (lambda (document message)
                    (when (buffer-live-p buffer)
                      (with-current-buffer buffer
@@ -917,7 +910,7 @@ error instead of leaving the buffer stuck."
       (setq openusage--process process))))
 
 (defun openusage--poll (buffer)
-  "Refresh BUFFER from the cache while it is visible.
+  "Refresh BUFFER from the tool while it is visible.
 Polls run from timers and hooks, so a remote BUFFER is skipped until
 its TRAMP connection is open: opening one blocks Emacs."
   (when (and (buffer-live-p buffer) (get-buffer-window buffer 'visible))
@@ -944,7 +937,7 @@ changes that leave each window's buffer as it was."
     (cancel-timer openusage--timer)))
 
 (defun openusage--revert (&optional _ignore-auto _noconfirm)
-  "Force a fresh pull, bypassing the shared cache."
+  "Re-read what the app last fetched and repaint."
   (setq openusage--signature nil)
   (openusage--refresh t))
 
@@ -971,7 +964,7 @@ With any provider open, fold them all; otherwise open them all."
 
 (defun openusage-visit ()
   "Open the provider at point in its detail buffer.
-With nothing at point, force a fresh pull instead."
+With nothing at point, re-read and repaint instead."
   (interactive)
   (pcase (openusage--key-at-point)
     (`(provider . ,provider-id) (openusage-provider provider-id openusage--directory))
@@ -1025,9 +1018,10 @@ DIRECTION is 1 to search forward, -1 backward; the search never wraps."
 
 (define-derived-mode openusage-mode special-mode "OpenUsage"
   "Major mode for a live OpenUsage buffer.
-The buffer polls OpenUsage's cache every `openusage-poll-interval'
-seconds while visible; a window showing it again repaints and fetches
-at once.  \\[revert-buffer] forces a fresh pull.
+The buffer re-reads what the app last fetched every
+`openusage-poll-interval' seconds while visible; a window showing it
+again repaints and fetches at once.  \\[revert-buffer] re-reads and
+repaints.
 
 \\{openusage-mode-map}"
   (setq-local revert-buffer-function #'openusage--revert
@@ -1080,8 +1074,9 @@ remote shows that host.  With a prefix argument, prompt for it."
 ;;;###autoload
 (defun openusage-provider (provider &optional directory)
   "Open PROVIDER's live OpenUsage detail buffer for DIRECTORY's host.
-PROVIDER is a provider id such as \"claude\"; a family id shows every
-account of that family.  With a prefix argument, prompt for DIRECTORY."
+PROVIDER is an account id such as \"codex@1a2b3c4d\", or a provider
+kind such as \"claude\" for every account of that kind.  With a prefix
+argument, prompt for DIRECTORY."
   (interactive
    (let ((directory (if current-prefix-arg
                         (read-directory-name "Host (directory): " default-directory)

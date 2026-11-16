@@ -23,13 +23,16 @@ That is the terminal rendering; a graphical frame draws each bar as a thin SVG r
 - `M-x openusage` opens the overview: a card per limit laid out like the app's, with the pace
   verdict, the bar, then the amount left and when it resets. Hovering the reset time shows it
   in the other format, countdown or exact.
-- `M-x openusage-provider` opens one provider in detail: when each limit resets, raw counts,
+- `M-x openusage-provider` opens one account in detail: when each limit resets, raw counts,
   how far into the window you are, burn rate, the projection at reset, every balance and the
-  cache age. `RET` on a provider or limit in the overview opens it too.
+  cache age. `RET` on a provider or limit in the overview opens it too. Pass an account id
+  such as `codex@1a2b3c4d`, or a provider kind such as `claude` for every account of that kind.
 
-Both buffers poll OpenUsage's shared five-minute cache while visible, and refresh the moment
-a window shows one again after it was buried. They follow `default-directory`, so from a buffer
-visiting a TRAMP remote they show that host's usage.
+Both buffers poll the `openusage` command while visible, and refresh the moment a window
+shows one again after it was buried. The command prints what the app last fetched; the app
+itself refreshes every five minutes, so a buffer never triggers a fetch of its own. They
+follow `default-directory`, so from a buffer visiting a TRAMP remote they show that host's
+usage.
 
 The bar is an SVG rail in a graphical frame. On a terminal the same text shows as an
 eighth-block glyph bar, so one buffer reads well in both.
@@ -49,8 +52,8 @@ marks where even use would put you right now.
 ## Requirements
 
 - Emacs 30.1 or newer.
-- The `openusage` command on `PATH` (on the remote host too, for TRAMP). Install it from the
-  OpenUsage app: **Settings → Command Line → Install…**.
+- OpenUsage 0.8 or newer, with the `openusage` command on `PATH` (on the remote host too, for
+  TRAMP). Install it from the OpenUsage app: **Settings → Advanced → Command Line → Install…**.
 
 ## Installation
 
@@ -72,15 +75,15 @@ Emacs 30's built-in `package-vc`:
 
 | Key | Command | Does |
 |---|---|---|
-| `TAB` | `openusage-toggle` | Fold or unfold the provider at point |
-| `S-TAB` | `openusage-cycle` | Fold every provider, or open them all, like `org-shifttab` |
-| `RET` | `openusage-visit` | Open the provider at point in detail; refresh with nothing at point |
-| `n` | `openusage-next-provider` | Move to the next provider; stops at the last |
-| `p` | `openusage-previous-provider` | Move to the previous provider; stops at the first |
-| `g` | `revert-buffer` | Force a fresh pull (`openusage --force`) |
+| `TAB` | `openusage-toggle` | Fold or unfold the account at point |
+| `S-TAB` | `openusage-cycle` | Fold every account, or open them all, like `org-shifttab` |
+| `RET` | `openusage-visit` | Open the account at point in detail; re-read with nothing at point |
+| `n` | `openusage-next-provider` | Move to the next account; stops at the last |
+| `p` | `openusage-previous-provider` | Move to the previous account; stops at the first |
+| `g` | `revert-buffer` | Re-read what the app last fetched and repaint |
 | `q` | `quit-window` | Quit |
 
-With a prefix argument, `openusage` and `openusage-provider` ask for the host directory. `imenu` lists the providers.
+With a prefix argument, `openusage` and `openusage-provider` ask for the host directory. `imenu` lists the accounts.
 
 ## Customization
 
@@ -124,7 +127,8 @@ The others:
 - `openusage-bar-width`: card width in columns.
 - `openusage-labels`: resource display names.
 - `openusage-resource-order`: the order resources are listed in.
-- `openusage-provider-order`: the order providers are listed in.
+- `openusage-provider-order`: the order accounts are listed in; an entry is an account id
+  (`codex@1a2b3c4d`) or a provider kind (`claude`) matching every account of that kind.
 
 Faces: `openusage-normal`, `openusage-warning`, `openusage-critical`, `openusage-provider`,
 `openusage-label`, `openusage-detail`.

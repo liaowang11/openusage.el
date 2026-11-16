@@ -1,79 +1,77 @@
 {
-  "schema": "openusage.limits.v1",
   "generatedAt": "2026-01-01T00:00:00.000Z",
   "providers": {
-    "claude": {
+    "claude@1a2b3c4d": {
       "displayName": "Claude",
-      "plan": "Team 5x",
-      "fetchedAt": "2026-01-01T00:00:00.000Z",
       "expiresAt": "2026-01-01T00:05:00.000Z",
-      "stale": true,
+      "fetchedAt": "2026-01-01T00:00:00.000Z",
+      "plan": "Team 5x",
       "resources": {
         "session": {
           "kind": "consumption",
-          "unit": "percent",
-          "used": 10,
           "limit": 100,
           "remaining": 90,
-          "utilization": 0.1,
           "resetsAt": "2026-01-01T04:00:00.000Z",
+          "unit": "percent",
+          "used": 10,
+          "utilization": 0.1,
           "windowSeconds": 18000
         },
         "weekly": {
           "kind": "consumption",
-          "unit": "percent",
-          "used": 40,
           "limit": 100,
           "remaining": 60,
-          "utilization": 0.4,
           "resetsAt": "2026-01-06T00:00:00.000Z",
+          "unit": "percent",
+          "used": 40,
+          "utilization": 0.4,
           "windowSeconds": 604800
         }
-      }
+      },
+      "stale": true
     },
-    "zai": {
+    "zai@ec71a797": {
       "displayName": "Z.ai",
-      "plan": "GLM Coding Lite",
-      "fetchedAt": "2026-01-01T00:00:00.000Z",
       "expiresAt": "2026-01-01T00:05:00.000Z",
-      "stale": false,
+      "fetchedAt": "2026-01-01T00:00:00.000Z",
+      "plan": "GLM Coding Lite",
       "resources": {
         "session": {
           "kind": "consumption",
-          "unit": "percent",
-          "used": 0,
           "limit": 100,
           "remaining": 100,
+          "unit": "percent",
+          "used": 0,
           "utilization": 0
         },
         "webSearches": {
           "kind": "consumption",
-          "unit": "searches",
-          "used": 3,
           "limit": 100,
           "remaining": 97,
-          "utilization": 0.03,
           "resetsAt": "2026-01-25T00:00:00.000Z",
+          "unit": "searches",
+          "used": 3,
+          "utilization": 0.03,
           "windowSeconds": 2592000
         }
-      }
+      },
+      "stale": false
     },
-    "codex": {
+    "codex@6fe4f1e4": {
       "displayName": "Codex",
-      "plan": "Plus",
-      "fetchedAt": "2026-01-01T00:00:00.000Z",
       "expiresAt": "2026-01-01T00:05:00.000Z",
-      "stale": false,
+      "fetchedAt": "2026-01-01T00:00:00.000Z",
+      "plan": "Plus",
       "resources": {
-        "credits": {
-          "available": 821,
-          "kind": "balance",
-          "unit": "credits"
-        },
         "creditValue": {
           "available": 12.5,
           "kind": "balance",
           "unit": "usd"
+        },
+        "credits": {
+          "available": 821,
+          "kind": "balance",
+          "unit": "credits"
         },
         "rateLimitResets": {
           "available": 2,
@@ -84,13 +82,9 @@
           "kind": "balance",
           "unit": "resets"
         }
-      }
+      },
+      "stale": false
     }
   },
-  "errors": [
-    {
-      "providerId": "claude",
-      "message": "Refresh failed; showing cached data."
-    }
-  ]
+  "schema": "openusage.limits.v2"
 }

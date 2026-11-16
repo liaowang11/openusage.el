@@ -70,12 +70,14 @@ FIELDS is a plist of `used' and any other keys to override."
       (should (equal (openusage-tests--render "combined.json" t)
                      (openusage-tests--expected "combined-detail.txt"))))))
 
-(ert-deftest openusage-test-error-only-provider ()
-  (should (equal (openusage-tests--render "error.json") "Codex  ! No current data.")))
+(ert-deftest openusage-test-empty-envelope ()
+  (should (equal (openusage-tests--render "error.json")
+                 "OpenUsage has not fetched any account yet; open the app and add or refresh one.")))
 
-(ert-deftest openusage-test-stale-provider-and-its-error ()
+(ert-deftest openusage-test-stale-provider ()
   (let ((text (openusage-tests--render "limits.json")))
-    (should (string-prefix-p "Claude · Team 5x  ! stale\n  ! Refresh failed; showing cached data.\n" text))))
+    (should (string-prefix-p "Claude · Team 5x  ! stale\n" text))
+    (should-not (string-match-p "! Refresh failed" text))))
 
 (ert-deftest openusage-test-healthy-hides-pacing-by-default ()
   "The app shows pacing on healthy limits only with Always Show Pacing."
@@ -114,14 +116,28 @@ FIELDS is a plist of `used' and any other keys to override."
     (should (equal (openusage-tests--headers (openusage-tests--render "combined.json"))
                    '("Z.ai · GLM Coding Lite" "Codex · Plus" "Claude · Team 5x" "Antigravity")))))
 
-(ert-deftest openusage-test-error-only-provider-follows-configured-order ()
+(ert-deftest openusage-test-account-id-order-entry ()
+  "An exact account id outranks a kind entry, whatever their order."
   (let* ((document (openusage-tests--fixture "combined.json"))
-         (openusage-provider-order '("cursor" "claude")))
-    (setf (alist-get 'errors document) '(((providerId . "cursor") (message . "Not signed in."))))
+         (openusage-provider-order '("codex@6fe4f1e4" "claude")))
     (should (equal (openusage-tests--headers
                     (substring-no-properties
                      (openusage-render document openusage-tests--now (make-hash-table :test 'equal))))
-                   '("Cursor  ! Not signed in." "Claude · Team 5x" "Antigravity"
+                   '("Codex · Plus" "Claude · Team 5x" "Antigravity" "Z.ai · GLM Coding Lite")))))
+
+(ert-deftest openusage-test-kind-order-groups-accounts ()
+  "A kind entry matches every account of that kind, keeping tool order."
+  (let* ((document (openusage-tests--fixture "combined.json"))
+         (providers (alist-get 'providers document))
+         (claude (alist-get 'claude@1a2b3c4d providers))
+         (openusage-provider-order '("claude")))
+    (setf (alist-get 'providers document)
+          (append (list (cons 'claude@aaaaaaaa claude) (cons 'claude@bbbbbbbb claude))
+                  (assq-delete-all 'claude@1a2b3c4d providers)))
+    (should (equal (openusage-tests--headers
+                    (substring-no-properties
+                     (openusage-render document openusage-tests--now (make-hash-table :test 'equal))))
+                   '("Claude · Team 5x" "Claude · Team 5x" "Antigravity"
                      "Codex · Plus" "Z.ai · GLM Coding Lite")))))
 
 (ert-deftest openusage-test-used-display ()
@@ -134,7 +150,7 @@ FIELDS is a plist of `used' and any other keys to override."
 
 (ert-deftest openusage-test-collapsed-provider ()
   (let ((expanded (make-hash-table :test 'equal)))
-    (puthash '(provider . "zai") nil expanded)
+    (puthash '(provider . "zai@ec71a797") nil expanded)
     (let ((text (substring-no-properties
                  (openusage-render (openusage-tests--fixture "combined.json")
                                    openusage-tests--now expanded))))
@@ -143,10 +159,10 @@ FIELDS is a plist of `used' and any other keys to override."
 (ert-deftest openusage-test-keys-on-every-row ()
   (let ((text (openusage-render (openusage-tests--fixture "combined.json")
                                 openusage-tests--now (make-hash-table :test 'equal))))
-    (should (equal (get-text-property 0 'openusage-key text) '(provider . "claude")))
+    (should (equal (get-text-property 0 'openusage-key text) '(provider . "claude@1a2b3c4d")))
     (let ((bar (string-search "\n  █" text)))
       (should (equal (get-text-property (1+ bar) 'openusage-key text)
-                     '(resource "claude" "session"))))))
+                     '(resource "claude@1a2b3c4d" "session"))))))
 
 ;;; Field selection
 
@@ -235,7 +251,13 @@ FIELDS is a plist of `used' and any other keys to override."
   (should (equal (openusage--label "codex" "rateLimitResets") "Rate Limit Resets"))
   (should (equal (openusage--label "antigravity" "nonGeminiWeekly") "Claude Weekly"))
   (should (equal (openusage--label "cursor" "credits") "Extra Usage"))
-  (should (equal (openusage--label "codex" "credits") "Credits")))
+  (should (equal (openusage--label "codex" "credits") "Credits"))
+  ;; Account ids match the provider-scoped labels through their kind.
+  (should (equal (openusage--label "antigravity@59f05e19" "nonGeminiWeekly") "Claude Weekly"))
+  (should (equal (openusage--label "cursor@1a2b3c4d" "credits") "Extra Usage"))
+  (let ((openusage-labels (cons '("codex@6fe4f1e4.credits" . "Work Credits") openusage-labels)))
+    (should (equal (openusage--label "codex@6fe4f1e4" "credits") "Work Credits"))
+    (should (equal (openusage--label "codex@99999999" "credits") "Credits"))))
 
 (ert-deftest openusage-test-amounts ()
   (should (equal (openusage--amount 52 "percent") "52%"))
@@ -334,7 +356,7 @@ FIELDS is a plist of `used' and any other keys to override."
 
 (ert-deftest openusage-test-cycle-like-org-shifttab ()
   (openusage-tests--with-buffer
-    (puthash '(provider . "codex") nil openusage--expanded)
+    (puthash '(provider . "codex@6fe4f1e4") nil openusage--expanded)
     (openusage-cycle)
     (should (equal (buffer-string)
                    "Claude · Team 5x …\n\nAntigravity …\n\nCodex · Plus …\n\nZ.ai · GLM Coding Lite …"))
@@ -355,10 +377,10 @@ FIELDS is a plist of `used' and any other keys to override."
       (cl-letf (((symbol-function 'openusage-provider) (lambda (provider &rest _) (setq opened provider))))
         (goto-char (point-max))
         (openusage-visit)
-        (should (equal opened "zai"))
+        (should (equal opened "zai@ec71a797"))
         (goto-char (point-min))
         (openusage-visit)
-        (should (equal opened "claude"))))))
+        (should (equal opened "claude@1a2b3c4d"))))))
 
 (ert-deftest openusage-test-provider-motion-without-wrapping ()
   (openusage-tests--with-buffer
@@ -367,31 +389,31 @@ FIELDS is a plist of `used' and any other keys to override."
     (should (= (point) (point-min)))
     (forward-line 2)
     (openusage-next-provider)
-    (should (equal (openusage--key-at-point) '(provider . "antigravity")))
+    (should (equal (openusage--key-at-point) '(provider . "antigravity@59f05e19")))
     (should (bolp))
     (openusage-next-provider)
     (openusage-next-provider)
-    (should (equal (openusage--key-at-point) '(provider . "zai")))
+    (should (equal (openusage--key-at-point) '(provider . "zai@ec71a797")))
     (goto-char (point-max))
     (should-error (openusage-next-provider) :type 'user-error)
     (should (= (point) (point-max)))
     (openusage-previous-provider)
-    (should (equal (openusage--key-at-point) '(provider . "zai")))
+    (should (equal (openusage--key-at-point) '(provider . "zai@ec71a797")))
     (openusage-previous-provider)
-    (should (equal (openusage--key-at-point) '(provider . "codex")))))
+    (should (equal (openusage--key-at-point) '(provider . "codex@6fe4f1e4")))))
 
 (ert-deftest openusage-test-imenu-lists-providers ()
   (openusage-tests--with-buffer
     (let ((index (openusage--imenu-index)))
       (should (equal (mapcar #'car index) '("Claude" "Antigravity" "Codex" "Z.ai")))
       (goto-char (cdr (nth 2 index)))
-      (should (equal (openusage--key-at-point) '(provider . "codex"))))))
+      (should (equal (openusage--key-at-point) '(provider . "codex@6fe4f1e4"))))))
 
 (ert-deftest openusage-test-repaint-keeps-point-entry ()
   (openusage-tests--with-buffer
     (goto-char (point-max))
     (openusage--repaint)
-    (should (equal (openusage--key-at-point) '(resource "zai" "webSearches")))))
+    (should (equal (openusage--key-at-point) '(resource "zai@ec71a797" "webSearches")))))
 
 (ert-deftest openusage-test-display-refreshes-at-once ()
   "A window showing the buffer again repaints and fetches immediately,
@@ -486,17 +508,20 @@ in the same minute paints, and a revert repaints unchanged data."
               (openusage--repaint)
               (should (equal (openusage--key-at-point) top-key))
               (should (equal (funcall key-in top) top-key))
-              (should (equal (funcall key-in bottom) '(resource "zai" "webSearches"))))))
+              (should (equal (funcall key-in bottom) '(resource "zai@ec71a797" "webSearches"))))))
       (delete-other-windows)
       (set-window-buffer nil previous))))
 
-(ert-deftest openusage-test-signature-ignores-jitter ()
+(ert-deftest openusage-test-signature-ignores-generated-at-only ()
   (let* ((document (openusage-tests--fixture "combined.json"))
-         (touched (copy-tree document)))
+         (touched (copy-tree document))
+         (zai (alist-get 'zai@ec71a797 (alist-get 'providers touched))))
     (setf (alist-get 'generatedAt touched) "2099-01-01T00:00:00.000Z")
-    (setf (alist-get 'fetchedAt (alist-get 'zai (alist-get 'providers touched))) "2026-09-28T14:22:25.123Z")
     (should (equal (openusage--document-signature document) (openusage--document-signature touched)))
-    (setf (alist-get 'used (alist-get 'session (alist-get 'resources (alist-get 'zai (alist-get 'providers touched))))) 20)
+    ;; Sub-second timestamp moves are real changes, not jitter to drop.
+    (setf (alist-get 'fetchedAt zai) "2026-09-28T14:22:25.123Z")
+    (should-not (equal (openusage--document-signature document) (openusage--document-signature touched)))
+    (setf (alist-get 'used (alist-get 'session (alist-get 'resources zai))) 20)
     (should-not (equal (openusage--document-signature document) (openusage--document-signature touched)))))
 
 ;;; Fetching
@@ -513,7 +538,7 @@ in the same minute paints, and a revert repaints unchanged data."
                              (expand-file-name "fixtures/combined.json" openusage-tests--dir)))))
           (set-file-modes script #o755)
           (let ((openusage-program script) result)
-            (openusage--fetch "zai" dir t (lambda (document err) (setq result (list document err))))
+            (openusage--fetch "zai" dir (lambda (document err) (setq result (list document err))))
             (with-timeout (5 (ert-fail "fetch timed out"))
               (while (not result) (accept-process-output nil 0.05)))
             (should (null (nth 1 result)))
@@ -521,7 +546,7 @@ in the same minute paints, and a revert repaints unchanged data."
             (should (equal (with-temp-buffer
                              (insert-file-contents (expand-file-name "args" dir))
                              (string-trim (buffer-string)))
-                           "zai --force"))))
+                           "zai"))))
       (delete-directory dir t))))
 
 ;; Upstream writes JSON to stdout, then warnings to stderr; a hard
@@ -537,7 +562,7 @@ Return the (DOCUMENT ERROR) its callback received."
             (insert "#!/bin/sh\n" body "\n"))
           (set-file-modes script #o755)
           (let ((openusage-program script) result)
-            (openusage--fetch nil dir nil (lambda (document err) (setq result (list document err))))
+            (openusage--fetch nil dir (lambda (document err) (setq result (list document err))))
             (with-timeout (5 (ert-fail "fetch timed out"))
               (while (not result) (accept-process-output nil 0.05)))
             result))
@@ -651,14 +676,14 @@ the file `runs' in `openusage--directory'."
       (replace-match "\"plan\": null" t t)
       (openusage--parse-output (current-buffer) 0 (lambda (document err) (setq result (list document err)))))
     (should (null (nth 1 result)))
-    (should (null (alist-get 'plan (alist-get 'claude (alist-get 'providers (car result))))))
+    (should (null (alist-get 'plan (alist-get 'claude@1a2b3c4d (alist-get 'providers (car result))))))
     (should (string-match-p "^Claude$" (substring-no-properties
                                         (openusage-render (car result) openusage-tests--now
                                                           (make-hash-table :test 'equal)))))))
 
 (ert-deftest openusage-test-fetch-missing-program ()
   (let ((openusage-program "openusage-not-installed-anywhere") result)
-    (openusage--fetch nil default-directory nil (lambda (document err) (setq result (list document err))))
+    (openusage--fetch nil default-directory (lambda (document err) (setq result (list document err))))
     (should (equal result '(nil "openusage-not-installed-anywhere is not on PATH")))))
 
 (provide 'openusage-tests)

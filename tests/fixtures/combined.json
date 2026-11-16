@@ -1,8 +1,7 @@
 {
-  "errors": [],
   "generatedAt": "2026-09-28T14:30:00.000Z",
   "providers": {
-    "claude": {
+    "claude@1a2b3c4d": {
       "displayName": "Claude",
       "expiresAt": "2026-09-28T14:30:47.000Z",
       "fetchedAt": "2026-09-28T14:25:47.000Z",
@@ -49,7 +48,7 @@
       },
       "stale": false
     },
-    "antigravity": {
+    "antigravity@59f05e19": {
       "displayName": "Antigravity",
       "expiresAt": "2026-09-28T14:27:24.000Z",
       "fetchedAt": "2026-09-28T14:22:24.000Z",
@@ -97,7 +96,7 @@
       },
       "stale": false
     },
-    "codex": {
+    "codex@6fe4f1e4": {
       "displayName": "Codex",
       "expiresAt": "2026-09-28T14:27:25.000Z",
       "fetchedAt": "2026-09-28T14:22:25.000Z",
@@ -145,7 +144,7 @@
       },
       "stale": false
     },
-    "zai": {
+    "zai@ec71a797": {
       "displayName": "Z.ai",
       "expiresAt": "2026-09-28T14:27:25.000Z",
       "fetchedAt": "2026-09-28T14:22:25.000Z",
@@ -175,5 +174,5 @@
       "stale": false
     }
   },
-  "schema": "openusage.limits.v1"
+  "schema": "openusage.limits.v2"
 }
