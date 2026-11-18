@@ -1,6 +1,6 @@
 ---
 name: emacsclient
-description: 'Emacs operations: querying or acting in the user''s running Emacs, running ERT, byte compilation or checkdoc on elisp, evaluating elisp against the user''s config, or starting any Emacs process or daemon.'
+description: 'Emacs operations: querying or acting in the user''s running Emacs (including Doom workspaces and agent-shell sessions), running ERT, byte compilation or checkdoc on elisp, evaluating elisp against the user''s config, or starting any Emacs process or daemon.'
 allowed-tools: Bash
 ---
 
@@ -57,6 +57,13 @@ Examples:
     (insert-file-contents "/path/to/file.el")
     (check-parens))'
   ```
+
+References for user-requested actions:
+- Doom workspaces: create, switch or close one:
+  [references/workspaces.md](references/workspaces.md).
+- agent-shell: create, resume, prompt, interrupt or quit a session,
+  hidden and without pickers:
+  [references/agent-shell.md](references/agent-shell.md).
 
 ## Batch Emacs
 

@@ -1,11 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
     "emacsclient": {
       "source": "liaowang11/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/emacsclient/SKILL.md",
-      "computedHash": "36a04fe17e270448f2dae5b659a096d3105f5f87f63039f9bd982db8d13b1988"
+      "computedHash": "41cbb306b7862b5287deb4c466730e56100c4e36e2f1f5da8336bb4f2c4be61a",
+      "commit": "395b7d9bcc6e28c6e0a5e3c1d1e60a02b979b7b2"
     }
   }
 }
