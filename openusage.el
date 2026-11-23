@@ -384,15 +384,16 @@ the reset."
     (_ "")))
 
 (defun openusage--projection (meter)
-  "Return where METER's pace lands at the reset, or nil with no pace."
+  "Return where METER's pace lands at the reset, or nil with no pace.
+Reads as what is left or what is used, following
+`openusage-usage-display'."
   (let ((projected (plist-get meter :projected)))
-    (pcase (plist-get meter :state)
-      ('healthy (format "~%d%% left at reset" (round (* 100 (- 1 projected)))))
-      ('close (format "~%d%% used at reset" (round (* 100 projected))))
-      ('running-out
-       (if (> projected 1)
-           (format "~%d%% over limit at reset" (round (* 100 (- projected 1))))
-         "~100% used at reset")))))
+    (when (memq (plist-get meter :state) '(healthy close running-out))
+      (if (> projected 1)
+          (format "~%d%% over limit at reset" (round (* 100 (- projected 1))))
+        (if (eq openusage-usage-display 'left)
+            (format "~%d%% left at reset" (round (* 100 (- 1 projected))))
+          (format "~%d%% used at reset" (round (* 100 projected))))))))
 
 (defun openusage--tick (meter resource now)
   "Return the even-pace tick of RESOURCE at NOW as a bar fraction, or nil.

@@ -58,14 +58,14 @@ Codex · Plus
   52% left                    Resets in 2h 32m
       window     2h 29m of 5h elapsed (50%)
       pace       0.97× even · 19.3% / hour
-      at reset   ~97% used at reset
+      at reset   ~3% left at reset
 
   Weekly                             ~8% spare
   ████████████████████████████████┊▌░░░░░░░░░░
   76% left                     Resets in 5d 4h
       window     1d 19h of 7d 0h elapsed (26%)
       pace       0.92× even · 13.1% / day
-      at reset   ~92% used at reset
+      at reset   ~8% left at reset
 
   Credits           0 credits
 

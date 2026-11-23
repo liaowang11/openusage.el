@@ -292,6 +292,17 @@ FIELDS is a plist of `used' and any other keys to override."
     (should (equal (openusage--verdict meter openusage-tests--now) "! Limit in 20m"))
     (should (equal (openusage--projection meter) "~50% over limit at reset"))))
 
+(ert-deftest openusage-test-projection-follows-usage-display ()
+  ;; 57% used at 60% projects 95% at the reset; 30% projects 50%.
+  (let ((close (openusage-tests--state 'used 57))
+        (healthy (openusage-tests--state 'used 30)))
+    (let ((openusage-usage-display 'left))
+      (should (equal (openusage--projection close) "~5% left at reset"))
+      (should (equal (openusage--projection healthy) "~50% left at reset")))
+    (let ((openusage-usage-display 'used))
+      (should (equal (openusage--projection close) "~95% used at reset"))
+      (should (equal (openusage--projection healthy) "~50% used at reset")))))
+
 (ert-deftest openusage-test-meter-spent-outranks-pace ()
   (let ((meter (openusage-tests--state 'used 99.6)))
     (should (eq (plist-get meter :state) 'spent))
